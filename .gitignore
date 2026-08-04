@@ -1,0 +1,11 @@
+.env
+backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
+android/.gradle/
+android/local.properties
+android/**/build/
+*.iml
+.idea/
+.DS_Store
