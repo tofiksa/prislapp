@@ -36,9 +36,12 @@ pytest -v
 ```bash
 cd android
 ./gradlew assembleDebug
+./gradlew testDebugUnitTest
 ```
 
 Emulator bruker `http://10.0.2.2:8000/` som API-base-URL.
+
+**Java-krav:** Gradle må kjøre på Java 21 (Java 24 gir feil ved unit tests). Sett `org.gradle.java.home` lokalt, f.eks. i `~/.gradle/gradle.properties`.
 
 For Google Sign-In: sett `GOOGLE_WEB_CLIENT_ID` i `android/app/build.gradle.kts` og `GOOGLE_CLIENT_ID` i `backend/.env`.
 
@@ -48,4 +51,5 @@ For Google Sign-In: sett `GOOGLE_WEB_CLIENT_ID` i `android/app/build.gradle.kts`
 - [x] Auth API (register, login, google, me)
 - [x] MinIO bucket-oppsett
 - [x] Android skeleton + auth UI
+- [x] Backend tester (4/4) + Android unit tests
 - [ ] Fase 2: kamera, opplasting, OCR
