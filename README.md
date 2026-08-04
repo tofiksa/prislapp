@@ -51,5 +51,14 @@ For Google Sign-In: sett `GOOGLE_WEB_CLIENT_ID` i `android/app/build.gradle.kts`
 - [x] Auth API (register, login, google, me)
 - [x] MinIO bucket-oppsett
 - [x] Android skeleton + auth UI
-- [x] Backend tester (4/4) + Android unit tests
-- [ ] Fase 2: kamera, opplasting, OCR
+- [x] Backend tester (10/10) + Android unit tests
+- [x] Fase 2: kamera, opplasting, OCR (se under)
+
+## Fase 2 status
+
+- [x] Backend: receipts/stores/receipt_items modeller + migrasjon
+- [x] Backend: POST/GET /receipts, MinIO-opplasting, Celery worker
+- [x] Backend: OCR stub + Rema 1000 parser med tester
+- [x] Android: CameraX, Room offline-kø, WorkManager-opplasting
+- [x] Android: polling UI + gjennomgangsskjerm (placeholder)
+- [ ] Fase 3: redigering, historikk, «billigst for meg»

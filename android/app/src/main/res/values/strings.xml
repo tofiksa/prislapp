@@ -12,6 +12,18 @@
     <string name="already_have_account">Har du allerede konto? Logg inn</string>
     <string name="welcome">Velkommen!</string>
     <string name="logout">Logg ut</string>
+    <string name="capture_receipt">Ta bilde av kvittering</string>
     <string name="capture_receipt_soon">Ta bilde av kvittering (kommer snart)</string>
     <string name="home_title">Prislapp</string>
+    <string name="camera_title">Kvitteringskamera</string>
+    <string name="camera_permission">Gi kameratilgang</string>
+    <string name="capture_button">Ta bilde</string>
+    <string name="processing_title">Behandler kvittering</string>
+    <string name="processing_status">Status: %1$s</string>
+    <string name="review_title">Gjennomgå kvittering</string>
+    <string name="review_placeholder">Redigering kommer i Fase 3. Bekreftelse er ikke tilgjengelig ennå.</string>
+    <string name="unknown_store">Ukjent butikk</string>
+    <string name="receipt_total">Total: %1$s kr</string>
+    <string name="upload_queue">Opplastingskø</string>
+    <string name="recent_receipts">Siste kvitteringer</string>
 </resources>

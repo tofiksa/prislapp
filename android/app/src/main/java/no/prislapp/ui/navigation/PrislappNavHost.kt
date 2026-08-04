@@ -5,13 +5,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import no.prislapp.ui.auth.AuthViewModel
 import no.prislapp.ui.auth.LoginScreen
 import no.prislapp.ui.auth.RegisterScreen
+import no.prislapp.ui.camera.CameraScreen
 import no.prislapp.ui.home.HomeScreen
+import no.prislapp.ui.receipt.ReceiptProcessingScreen
+import no.prislapp.ui.receipt.ReceiptReviewScreen
 
 @Composable
 fun PrislappNavHost(
@@ -59,7 +64,45 @@ fun PrislappNavHost(
             )
         }
         composable(Routes.HOME) {
-            HomeScreen(onLogout = { authViewModel.logout() })
+            HomeScreen(
+                onCaptureReceipt = { navController.navigate(Routes.CAMERA) },
+                onOpenReceipt = { receiptId ->
+                    navController.navigate(Routes.review(receiptId))
+                },
+                onOpenPending = { localId ->
+                    navController.navigate(Routes.processing(localId))
+                },
+                onLogout = { authViewModel.logout() },
+            )
+        }
+        composable(Routes.CAMERA) {
+            CameraScreen(
+                onCaptured = { localId ->
+                    navController.navigate(Routes.processing(localId)) {
+                        popUpTo(Routes.HOME)
+                    }
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.PROCESSING,
+            arguments = listOf(navArgument("localId") { type = NavType.LongType }),
+        ) {
+            ReceiptProcessingScreen(
+                onReadyForReview = { receiptId ->
+                    navController.navigate(Routes.review(receiptId)) {
+                        popUpTo(Routes.HOME)
+                    }
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.REVIEW,
+            arguments = listOf(navArgument("receiptId") { type = NavType.StringType }),
+        ) {
+            ReceiptReviewScreen(onBack = { navController.popBackStack() })
         }
     }
 }
