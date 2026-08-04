@@ -1,0 +1,15 @@
+Generic single-database configuration with async SQLAlchemy.
+
+Run migrations:
+
+```bash
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+```
+
+Create a new migration:
+
+```bash
+alembic revision -m "description"
+```
