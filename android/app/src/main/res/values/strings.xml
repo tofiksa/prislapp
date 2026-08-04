@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Prislapp</string>
+    <string name="login_title">Logg inn</string>
+    <string name="register_title">Opprett konto</string>
+    <string name="email">E-post</string>
+    <string name="password">Passord</string>
+    <string name="confirm_password">Bekreft passord</string>
+    <string name="login_button">Logg inn</string>
+    <string name="register_button">Registrer</string>
+    <string name="google_sign_in">Logg inn med Google</string>
+    <string name="create_account">Opprett konto</string>
+    <string name="already_have_account">Har du allerede konto? Logg inn</string>
+    <string name="welcome">Velkommen!</string>
+    <string name="logout">Logg ut</string>
+    <string name="capture_receipt_soon">Ta bilde av kvittering (kommer snart)</string>
+    <string name="home_title">Prislapp</string>
+</resources>
