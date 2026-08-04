@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from minio import Minio
 
 from app.config import settings
@@ -22,3 +24,26 @@ class StorageService:
             return True
         except Exception:
             return False
+
+    def upload_receipt(
+        self,
+        object_name: str,
+        data: bytes,
+        content_type: str = "image/jpeg",
+    ) -> str:
+        self.client.put_object(
+            settings.minio_bucket,
+            object_name,
+            BytesIO(data),
+            length=len(data),
+            content_type=content_type,
+        )
+        return object_name
+
+    def download_receipt(self, object_name: str) -> bytes:
+        response = self.client.get_object(settings.minio_bucket, object_name)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()

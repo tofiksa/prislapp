@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "receipts"
     minio_secure: bool = False
+    redis_url: str = "redis://localhost:6379/0"
+    receipt_image_retention_days: int = 30
+    celery_task_always_eager: bool = False
 
 
 settings = Settings()
