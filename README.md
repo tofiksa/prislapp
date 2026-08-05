@@ -41,7 +41,13 @@ cd android
 
 Emulator bruker `http://10.0.2.2:8000/` som API-base-URL.
 
-**Java-krav:** Gradle må kjøre på Java 21 (Java 24 gir feil ved unit tests). Sett `org.gradle.java.home` lokalt, f.eks. i `~/.gradle/gradle.properties`.
+**Java / Gradle-krav (lokal maskin):**
+
+- **JDK 25** for å kjøre Gradle (f.eks. Azul Zulu: `brew install --cask zulu@25`, eller tarball under `~/Library/Java/JavaVirtualMachines/`).
+- **Gradle 9.5.1** (wrapper) og **AGP 8.13.2** — JDK 25 krever Gradle 9.5+; eldre 8.x feiler ved oppstart med Kotlin DSL på Java 25.
+- Sett `JAVA_HOME` til JDK 25, eller `org.gradle.java.home` i `~/.gradle/gradle.properties` / `android/gradle.properties`.
+- App-kode kompileres fortsatt mot **Java 17** (`compileOptions` / `jvmTarget`).
+- **Java 24:** Gradle 8.14+ løser tidligere «Type T not present» på unit tests; bruk JDK 25 + Gradle 9.5 for anbefalt oppsett.
 
 For Google Sign-In: sett `GOOGLE_WEB_CLIENT_ID` i `android/app/build.gradle.kts` og `GOOGLE_CLIENT_ID` i `backend/.env`.
 
