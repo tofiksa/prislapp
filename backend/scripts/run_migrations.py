@@ -34,6 +34,8 @@ async def _alembic_revision() -> str | None:
 async def _detect_schema_revision() -> str | None:
     if await _table_exists("price_observations"):
         return "003"
+    if await _table_exists("products"):
+        return "003"
     if await _table_exists("receipts"):
         return "002"
     if await _table_exists("users"):
