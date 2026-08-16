@@ -12,7 +12,10 @@ class ReceiptItem(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     receipt_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("receipts.id"), index=True)
-    product_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("products.id"),
+        nullable=True,
+    )
     raw_product_name: Mapped[str] = mapped_column(String(512))
     quantity: Mapped[Decimal] = mapped_column(Numeric(10, 3), default=Decimal("1"))
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)

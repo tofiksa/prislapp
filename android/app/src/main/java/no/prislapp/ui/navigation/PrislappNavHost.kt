@@ -14,7 +14,10 @@ import no.prislapp.ui.auth.AuthViewModel
 import no.prislapp.ui.auth.LoginScreen
 import no.prislapp.ui.auth.RegisterScreen
 import no.prislapp.ui.camera.CameraScreen
+import no.prislapp.ui.history.HistoryScreen
 import no.prislapp.ui.home.HomeScreen
+import no.prislapp.ui.product.ProductPricesScreen
+import no.prislapp.ui.product.ProductSearchScreen
 import no.prislapp.ui.receipt.ReceiptProcessingScreen
 import no.prislapp.ui.receipt.ReceiptReviewScreen
 
@@ -72,6 +75,8 @@ fun PrislappNavHost(
                 onOpenPending = { localId ->
                     navController.navigate(Routes.processing(localId))
                 },
+                onOpenHistory = { navController.navigate(Routes.HISTORY) },
+                onOpenProductSearch = { navController.navigate(Routes.PRODUCT_SEARCH) },
                 onLogout = { authViewModel.logout() },
             )
         }
@@ -102,7 +107,36 @@ fun PrislappNavHost(
             route = Routes.REVIEW,
             arguments = listOf(navArgument("receiptId") { type = NavType.StringType }),
         ) {
-            ReceiptReviewScreen(onBack = { navController.popBackStack() })
+            ReceiptReviewScreen(
+                onConfirmed = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.HOME) { inclusive = true }
+                    }
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.HISTORY) {
+            HistoryScreen(
+                onOpenReceipt = { receiptId ->
+                    navController.navigate(Routes.review(receiptId))
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.PRODUCT_SEARCH) {
+            ProductSearchScreen(
+                onOpenProduct = { productId ->
+                    navController.navigate(Routes.productPrices(productId))
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.PRODUCT_PRICES,
+            arguments = listOf(navArgument("productId") { type = NavType.StringType }),
+        ) {
+            ProductPricesScreen(onBack = { navController.popBackStack() })
         }
     }
 }

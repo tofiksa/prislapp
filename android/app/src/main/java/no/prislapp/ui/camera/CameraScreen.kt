@@ -3,6 +3,7 @@ package no.prislapp.ui.camera
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -61,6 +63,11 @@ fun CameraScreen(
     ) { granted ->
         hasCameraPermission = granted
     }
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        uri?.let(viewModel::onGalleryImageSelected)
+    }
 
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
@@ -84,7 +91,16 @@ fun CameraScreen(
                 .padding(padding),
         ) {
             when {
-                !hasCameraPermission -> {
+                uiState.isSaving -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                hasCameraPermission -> {
+                    CameraPreviewContent(
+                        onCapture = viewModel::onPhotoCaptured,
+                        createOutputFile = viewModel::createOutputFile,
+                    )
+                }
+                else -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
@@ -94,14 +110,20 @@ fun CameraScreen(
                         }
                     }
                 }
-                uiState.isSaving -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-                else -> {
-                    CameraPreviewContent(
-                        onCapture = viewModel::onPhotoCaptured,
-                        createOutputFile = viewModel::createOutputFile,
-                    )
+            }
+
+            if (!uiState.isSaving) {
+                OutlinedButton(
+                    onClick = {
+                        galleryLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(24.dp),
+                ) {
+                    Text(stringResource(R.string.pick_from_gallery))
                 }
             }
 
@@ -124,7 +146,12 @@ private fun CameraPreviewContent(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView = remember { PreviewView(context) }
+    val previewView = remember {
+        PreviewView(context).apply {
+            // Samsung Galaxy devices (e.g. S21) can render a black preview with the default mode.
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+    }
     val imageCapture = remember { ImageCapture.Builder().build() }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 

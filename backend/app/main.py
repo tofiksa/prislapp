@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.database import Base, engine
-from app.routers import auth, health, receipts
+from app.routers import auth, health, products, receipts, stores
 from app.services.storage_service import StorageService
 
 
@@ -22,6 +22,8 @@ app = FastAPI(title="Prislapp API", version="0.1.0", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(receipts.router)
+app.include_router(products.router)
+app.include_router(stores.router)
 
 
 @app.get("/")

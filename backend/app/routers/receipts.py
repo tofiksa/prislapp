@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.receipt import (
+    ReceiptConfirmRequest,
     ReceiptDetailResponse,
     ReceiptItemResponse,
     ReceiptListResponse,
@@ -91,14 +93,23 @@ async def upload_receipt(
 async def list_receipts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    store_id: str | None = None,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+    status: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = ReceiptService(db)
+    parsed_store_id = uuid.UUID(store_id) if store_id else None
     receipts, total = await service.list_receipts_for_user(
         current_user.id,
         page=page,
         page_size=page_size,
+        store_id=parsed_store_id,
+        from_date=from_date,
+        to_date=to_date,
+        status=status,
     )
     return ReceiptListResponse(
         items=[_to_summary(r) for r in receipts],
@@ -122,3 +133,40 @@ async def get_receipt(
     if not receipt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
     return _to_detail(receipt)
+
+
+@router.put("/{receipt_id}/confirm", response_model=ReceiptDetailResponse)
+async def confirm_receipt(
+    receipt_id: str,
+    body: ReceiptConfirmRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = ReceiptService(db)
+    try:
+        receipt = await service.confirm_receipt(
+            uuid.UUID(receipt_id),
+            current_user.id,
+            body.store_name,
+            body.purchase_date,
+            body.total,
+            [item.model_dump() for item in body.items],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if not receipt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
+    return _to_detail(receipt)
+
+
+@router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_receipt(
+    receipt_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = ReceiptService(db)
+    deleted = await service.delete_receipt(uuid.UUID(receipt_id), current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")

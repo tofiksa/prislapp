@@ -1,14 +1,17 @@
 package no.prislapp.data.repository
 
 import android.content.Context
+import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import no.prislapp.data.local.dao.PendingReceiptDao
 import no.prislapp.data.local.entity.PendingReceiptEntity
 import no.prislapp.data.remote.PrislappApi
+import no.prislapp.data.remote.dto.ReceiptConfirmRequest
 import no.prislapp.data.remote.dto.ReceiptDetailResponse
 import no.prislapp.data.remote.dto.ReceiptListResponse
 import no.prislapp.data.remote.dto.ReceiptUploadResponse
+import no.prislapp.data.remote.dto.StoreListResponse
 import no.prislapp.worker.ReceiptPollWorker
 import no.prislapp.worker.ReceiptUploadWorker
 import okhttp3.MediaType.Companion.toMediaType
@@ -46,6 +49,31 @@ class ReceiptRepository @Inject constructor(
 
     suspend fun listReceipts(page: Int = 1): ReceiptListResponse {
         return api.listReceipts(page)
+    }
+
+    suspend fun listReceiptsFiltered(
+        page: Int = 1,
+        storeId: String? = null,
+        status: String? = null,
+    ): ReceiptListResponse {
+        return api.listReceipts(page = page, storeId = storeId, status = status)
+    }
+
+    suspend fun confirmReceipt(
+        receiptId: String,
+        request: ReceiptConfirmRequest,
+    ): ReceiptDetailResponse {
+        val response = api.confirmReceipt(receiptId, request)
+        syncLocalStatus(receiptId, response.status)
+        return response
+    }
+
+    suspend fun deleteReceipt(receiptId: String) {
+        api.deleteReceipt(receiptId)
+    }
+
+    suspend fun listStores(): StoreListResponse {
+        return api.listStores()
     }
 
     suspend fun uploadPendingReceipt(entity: PendingReceiptEntity): ReceiptUploadResponse {
@@ -96,5 +124,13 @@ class ReceiptRepository @Inject constructor(
     fun createReceiptImageFile(): File {
         val dir = File(context.filesDir, "receipts").apply { mkdirs() }
         return File(dir, "receipt_${System.currentTimeMillis()}.jpg")
+    }
+
+    fun copyReceiptImageFromUri(sourceUri: Uri): File {
+        val destFile = createReceiptImageFile()
+        context.contentResolver.openInputStream(sourceUri)?.use { input ->
+            destFile.outputStream().use { output -> input.copyTo(output) }
+        } ?: error("Kunne ikke lese bilde fra galleri")
+        return destFile
     }
 }

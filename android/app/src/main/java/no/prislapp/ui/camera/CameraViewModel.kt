@@ -1,5 +1,6 @@
 package no.prislapp.ui.camera
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,6 +29,14 @@ class CameraViewModel @Inject constructor(
     fun createOutputFile(): File = receiptRepository.createReceiptImageFile()
 
     fun onPhotoCaptured(imageFile: File) {
+        queueReceiptImage(imageFile)
+    }
+
+    fun onGalleryImageSelected(sourceUri: Uri) {
+        queueReceiptImage(receiptRepository.copyReceiptImageFromUri(sourceUri))
+    }
+
+    private fun queueReceiptImage(imageFile: File) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
             try {

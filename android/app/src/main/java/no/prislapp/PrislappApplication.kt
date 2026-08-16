@@ -4,15 +4,27 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
-import javax.inject.Inject
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 
 @HiltAndroidApp
 class PrislappApplication : Application(), Configuration.Provider {
-    @Inject
-    lateinit var workerFactory: HiltWorkerFactory
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
-            .setWorkerFactory(workerFactory)
+            .setWorkerFactory(
+                EntryPointAccessors.fromApplication(
+                    this,
+                    WorkerFactoryEntryPoint::class.java,
+                ).workerFactory(),
+            )
             .build()
+
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface WorkerFactoryEntryPoint {
+        fun workerFactory(): HiltWorkerFactory
+    }
 }

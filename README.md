@@ -57,7 +57,7 @@ For Google Sign-In: sett `GOOGLE_WEB_CLIENT_ID` i `android/app/build.gradle.kts`
 - [x] Auth API (register, login, google, me)
 - [x] MinIO bucket-oppsett
 - [x] Android skeleton + auth UI
-- [x] Backend tester (10/10) + Android unit tests
+- [x] Backend tester (13/13) + Android unit tests
 - [x] Fase 2: kamera, opplasting, OCR (se under)
 
 ## Fase 2 status
@@ -66,5 +66,14 @@ For Google Sign-In: sett `GOOGLE_WEB_CLIENT_ID` i `android/app/build.gradle.kts`
 - [x] Backend: POST/GET /receipts, MinIO-opplasting, Celery worker
 - [x] Backend: OCR stub + Rema 1000 parser med tester
 - [x] Android: CameraX, Room offline-kø, WorkManager-opplasting
-- [x] Android: polling UI + gjennomgangsskjerm (placeholder)
-- [ ] Fase 3: redigering, historikk, «billigst for meg»
+- [x] Android: polling UI + gjennomgangsskjerm
+
+## Fase 3 status
+
+- [x] Backend: products/product_aliases/price_observations + migrasjon 003
+- [x] Backend: PUT /receipts/{id}/confirm, DELETE /receipts/{id}
+- [x] Backend: GET /products/search, GET /products/{id}/my-prices, GET /stores
+- [x] Backend: listefilter på GET /receipts (butikk, status)
+- [x] Android: redigerbar gjennomgangsskjerm + bekreftelse
+- [x] Android: historikk med butikkfilter
+- [x] Android: produktsøk og «billigst for meg»

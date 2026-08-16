@@ -2,15 +2,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+from app.models.product import PriceObservation
 from app.models.receipt import Receipt, ReceiptStatus
 from app.models.receipt_item import ReceiptItem
 from app.models.store import Store
 from app.models.user import User
+from app.services.product_service import ProductService
 from app.services.storage_service import StorageService
 from app.services.store_service import normalize_store_name
 
@@ -67,17 +69,31 @@ class ReceiptService:
         user_id: uuid.UUID,
         page: int = 1,
         page_size: int = 20,
+        store_id: uuid.UUID | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+        status: str | None = None,
     ) -> tuple[list[Receipt], int]:
         offset = (page - 1) * page_size
+        filters = [Receipt.user_id == user_id]
+        if store_id:
+            filters.append(Receipt.store_id == store_id)
+        if from_date:
+            filters.append(Receipt.purchase_date >= from_date)
+        if to_date:
+            filters.append(Receipt.purchase_date <= to_date)
+        if status:
+            filters.append(Receipt.status == status)
+
         count_result = await self.db.execute(
-            select(func.count()).select_from(Receipt).where(Receipt.user_id == user_id),
+            select(func.count()).select_from(Receipt).where(*filters),
         )
         total = count_result.scalar_one()
 
         result = await self.db.execute(
             select(Receipt)
             .options(selectinload(Receipt.store))
-            .where(Receipt.user_id == user_id)
+            .where(*filters)
             .order_by(Receipt.created_at.desc())
             .offset(offset)
             .limit(page_size),
@@ -152,3 +168,100 @@ class ReceiptService:
         if receipt:
             receipt.status = ReceiptStatus.FAILED.value
             await self.db.commit()
+
+    async def confirm_receipt(
+        self,
+        receipt_id: uuid.UUID,
+        user_id: uuid.UUID,
+        store_name: str | None,
+        purchase_date: datetime | None,
+        total: Decimal | None,
+        items: list[dict],
+    ) -> Receipt | None:
+        receipt = await self.get_receipt_for_user(receipt_id, user_id)
+        if not receipt:
+            return None
+        if receipt.status != ReceiptStatus.READY_FOR_REVIEW.value:
+            raise ValueError("Receipt is not ready for review")
+
+        if store_name:
+            store = await self.get_or_create_store(store_name, None)
+            receipt.store_id = store.id
+        store = receipt.store
+
+        if purchase_date is not None:
+            receipt.purchase_date = purchase_date
+        if total is not None:
+            receipt.total = total
+
+        await self.db.execute(
+            delete(ReceiptItem).where(ReceiptItem.receipt_id == receipt.id),
+        )
+        await self.db.flush()
+
+        product_service = ProductService(self.db)
+        observed_at = receipt.purchase_date or datetime.now(timezone.utc)
+        store_id = store.id if store else None
+
+        for item in items:
+            product = await product_service.resolve_product(
+                item["raw_product_name"],
+                store_id,
+            )
+            receipt_item = ReceiptItem(
+                receipt_id=receipt.id,
+                product_id=product.id,
+                raw_product_name=item["raw_product_name"],
+                quantity=item["quantity"],
+                unit_price=item.get("unit_price"),
+                line_total=item["line_total"],
+            )
+            self.db.add(receipt_item)
+            await self.db.flush()
+
+            if store_id:
+                self.db.add(
+                    PriceObservation(
+                        user_id=user_id,
+                        product_id=product.id,
+                        store_id=store_id,
+                        receipt_item_id=receipt_item.id,
+                        price=item["line_total"],
+                        observed_at=observed_at,
+                    ),
+                )
+
+        receipt.status = ReceiptStatus.CONFIRMED.value
+        await self.db.commit()
+        return await self.get_receipt_for_user(receipt_id, user_id)
+
+    async def delete_receipt(
+        self,
+        receipt_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> bool:
+        receipt = await self.get_receipt_for_user(receipt_id, user_id)
+        if not receipt:
+            return False
+
+        item_ids = [item.id for item in receipt.items]
+        if item_ids:
+            await self.db.execute(
+                delete(PriceObservation).where(
+                    PriceObservation.receipt_item_id.in_(item_ids),
+                ),
+            )
+
+        await self.db.delete(receipt)
+        await self.db.commit()
+        return True
+
+    async def list_stores_for_user(self, user_id: uuid.UUID) -> list[Store]:
+        result = await self.db.execute(
+            select(Store)
+            .join(Receipt, Receipt.store_id == Store.id)
+            .where(Receipt.user_id == user_id, Receipt.status == ReceiptStatus.CONFIRMED.value)
+            .distinct()
+            .order_by(Store.name),
+        )
+        return list(result.scalars().all())

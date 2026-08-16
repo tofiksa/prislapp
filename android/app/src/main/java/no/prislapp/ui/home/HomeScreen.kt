@@ -29,6 +29,8 @@ fun HomeScreen(
     onCaptureReceipt: () -> Unit,
     onOpenReceipt: (receiptId: String) -> Unit,
     onOpenPending: (localId: Long) -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenProductSearch: () -> Unit,
     onLogout: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -52,6 +54,20 @@ fun HomeScreen(
                 modifier = Modifier.padding(top = 16.dp),
             ) {
                 Text(stringResource(R.string.capture_receipt))
+            }
+
+            OutlinedButton(
+                onClick = onOpenHistory,
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Text(stringResource(R.string.history_title))
+            }
+
+            OutlinedButton(
+                onClick = onOpenProductSearch,
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Text(stringResource(R.string.product_search_title))
             }
 
             if (uiState.isLoading) {

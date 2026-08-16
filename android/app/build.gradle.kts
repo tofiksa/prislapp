@@ -2,9 +2,25 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
 }
+
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+// Default: production API (works on physical devices like Galaxy S21).
+// Override in android/local.properties for local dev, e.g.:
+//   api.base.url=http://10.0.2.2:8000/          (emulator → localhost)
+//   api.base.url=http://192.168.86.x:8000/      (phone → machine on Wi-Fi)
+val apiBaseUrl = localProperties.getProperty("api.base.url")
+    ?: "https://prislapp-api.sliplane.app/"
 
 android {
     namespace = "no.prislapp"
@@ -12,13 +28,17 @@ android {
 
     defaultConfig {
         applicationId = "no.prislapp"
-        minSdk = 26
+        // Galaxy S21 shipped with Android 11 (API 30); supports arm64-v8a.
+        minSdk = 30
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -54,6 +74,8 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    buildToolsVersion = "36.0.0"
+    ndkVersion = "30.0.14904198 rc1"
 }
 
 dependencies {
@@ -89,6 +111,7 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

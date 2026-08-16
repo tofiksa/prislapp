@@ -47,3 +47,18 @@ data class ReceiptItemResponse(
     val unit_price: BigDecimal?,
     val line_total: BigDecimal,
 )
+
+data class ReceiptConfirmItemRequest(
+    val id: String? = null,
+    val raw_product_name: String,
+    val quantity: BigDecimal,
+    val unit_price: BigDecimal? = null,
+    val line_total: BigDecimal,
+)
+
+data class ReceiptConfirmRequest(
+    val store_name: String? = null,
+    val purchase_date: String? = null,
+    val total: BigDecimal? = null,
+    val items: List<ReceiptConfirmItemRequest>,
+)
