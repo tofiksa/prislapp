@@ -102,6 +102,10 @@ celery -A app.worker.celery_app worker --loglevel=info
 celery -A app.worker.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
 ```
 
+Produksjon på Sliplane kjører fra 2026-09-10 scheduler innebygd i den ene worker-tjenesten:
+`celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 --beat --schedule=/tmp/celerybeat-schedule`.
+Det skal ikke kjøres en ekstra Beat-instans samtidig med dette oppsettet.
+
 Scheduler sjekker utløpte bilder hver time. Historikk beholdes når originalen utløper.
 Android sletter den lokale bildekopien etter vellykket opplasting og rydder resterende
 utløpte køelementer med WorkManager (kjøretid styres av Android).

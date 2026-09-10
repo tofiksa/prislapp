@@ -49,7 +49,12 @@ til OCR, bekreftelse, produktsøk, prisvisning og sletting.
 
 Android-instrumentering dekker Room/migrasjon og innlogging → historikk → produktsøk → utlogging mot lokal backend.
 Fysisk kamerakvalitet på Samsung/Pixel og Google OAuth-verifikasjon krever separat
-enhet-/kontokonfigurasjon. Produksjonsdeploy er ikke utført i denne leveransen.
+enhet-/kontokonfigurasjon.
+
+Produksjonsdeploy 2026-09-10: commit `70256bf` pushet til `main`; API kjørte migrasjon
+003 → 004. Worker er konfigurert med én OCR-prosess og innebygd Celery Beat.
+Produksjonens `/health` rapporterer PostgreSQL og bildelagring `ok`; refresh- og
+retry-endepunktene finnes i OpenAPI. Android er committet, men ikke publisert til Google Play.
 
 Flere kvitteringer i ett bilde splittes ikke automatisk. Europris-parseren kan hente
 venstre varelinjer fra det sammensatte eksempelbildet; bruk ett bilde per kvittering.
