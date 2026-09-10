@@ -6,15 +6,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -25,6 +22,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.prislapp.R
 import no.prislapp.ui.components.PrislappTopBar
 import no.prislapp.ui.components.ReceiptRow
+import no.prislapp.ui.components.formatReceiptSubtitle
+import java.math.BigDecimal
 
 @Composable
 fun ProductSearchScreen(
@@ -85,7 +84,6 @@ fun ProductSearchScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductPricesScreen(
     onBack: () -> Unit,
@@ -95,8 +93,10 @@ fun ProductPricesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.cheapest_for_me_title)) },
-                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
+            PrislappTopBar(
+                title = stringResource(R.string.cheapest_for_me_title),
+                onBack = onBack,
+            )
         },
     ) { padding ->
         Column(
@@ -113,32 +113,82 @@ fun ProductPricesScreen(
                         text = prices.product.canonical_name,
                         style = MaterialTheme.typography.titleLarge,
                     )
-                    prices.cheapest?.let { cheapest ->
+                    val cheapest = prices.cheapest
+                    if (cheapest != null) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp),
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.cheapest_price,
+                                        cheapest.store.name,
+                                        cheapest.price.toPlainString().replace('.', ','),
+                                    ),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                )
+                                Text(
+                                    text = formatReceiptSubtitle(cheapest.observed_at.take(10), null),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                            }
+                        }
                         Text(
-                            text = stringResource(
-                                R.string.cheapest_price,
-                                cheapest.store.name,
-                                cheapest.price.toPlainString(),
-                            ),
-                            style = MaterialTheme.typography.titleMedium,
+                            text = stringResource(R.string.price_per_unit),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(top = 16.dp),
+                        ) {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.latest_store_prices),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                            items(prices.latest_by_store) { observation ->
+                                Text(
+                                    text = formatPriceObservationLine(
+                                        storeName = observation.store.name,
+                                        price = observation.price,
+                                        observedAt = observation.observed_at,
+                                    ),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                )
+                            }
+                            item {
+                                Text(
+                                    text = stringResource(R.string.all_observations),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.padding(top = 16.dp),
+                                )
+                            }
+                            items(prices.observations) { observation ->
+                                Text(
+                                    text = formatPriceObservationLine(
+                                        storeName = observation.store.name,
+                                        price = observation.price,
+                                        observedAt = observation.observed_at,
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = stringResource(R.string.no_price_observations),
                             modifier = Modifier.padding(top = 16.dp),
                         )
-                    }
-                    LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
-                        item { Text(stringResource(R.string.price_per_unit)) }
-                        item { Text(stringResource(R.string.latest_store_prices), style = MaterialTheme.typography.titleSmall) }
-                        items(prices.latest_by_store) { observation ->
-                            Text("${observation.store.name}: ${observation.price.toPlainString()} kr (${observation.observed_at.take(10)})",
-                                modifier = Modifier.padding(vertical = 4.dp))
-                        }
-                        item { Text(stringResource(R.string.all_observations), style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(top = 16.dp)) }
-                        items(prices.observations) { observation ->
-                            Text(
-                                text = "${observation.store.name}: ${observation.price.toPlainString()} kr (${observation.observed_at.take(10)})",
-                                modifier = Modifier.padding(vertical = 4.dp),
-                            )
-                        }
                     }
                 }
             }
@@ -152,4 +202,14 @@ fun ProductPricesScreen(
             }
         }
     }
+}
+
+private fun formatPriceObservationLine(
+    storeName: String,
+    price: BigDecimal,
+    observedAt: String,
+): String {
+    val priceText = formatReceiptSubtitle(null, price)
+    val dateText = formatReceiptSubtitle(observedAt.take(10), null)
+    return "$storeName · $priceText · $dateText"
 }
