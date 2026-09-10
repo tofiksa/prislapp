@@ -1,5 +1,6 @@
 package no.prislapp.ui.home
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -90,6 +91,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
+            contentPadding = PaddingValues(bottom = 88.dp),
         ) {
             if (uiState.isLoading) {
                 item {

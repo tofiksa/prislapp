@@ -19,7 +19,6 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val datePrefixPattern = Regex("""^\d{4}-\d{2}-\d{2}""")
 private val displayDateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 private val osloZone = ZoneId.of("Europe/Oslo")
 
@@ -29,13 +28,15 @@ fun formatReceiptSubtitle(purchaseDateIso: String?, total: BigDecimal?): String 
     return listOfNotNull(dateText, totalText).joinToString(" · ")
 }
 
-private fun formatPurchaseDate(purchaseDateIso: String): String {
-    val localDate = if (purchaseDateIso.length >= 10 && datePrefixPattern.containsMatchIn(purchaseDateIso)) {
-        LocalDate.parse(purchaseDateIso.take(10))
-    } else {
-        OffsetDateTime.parse(purchaseDateIso).atZoneSameInstant(osloZone).toLocalDate()
-    }
-    return localDate.format(displayDateFormatter)
+private fun formatPurchaseDate(purchaseDateIso: String): String? {
+    return runCatching {
+        val localDate = if (purchaseDateIso.length == 10) {
+            LocalDate.parse(purchaseDateIso)
+        } else {
+            OffsetDateTime.parse(purchaseDateIso).atZoneSameInstant(osloZone).toLocalDate()
+        }
+        localDate.format(displayDateFormatter)
+    }.getOrNull()
 }
 
 @Composable

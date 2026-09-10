@@ -130,7 +130,7 @@ fun ProductPricesScreen(
                                     style = MaterialTheme.typography.headlineSmall,
                                 )
                                 Text(
-                                    text = formatReceiptSubtitle(cheapest.observed_at.take(10), null),
+                                    text = formatReceiptSubtitle(cheapest.observed_at, null),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(top = 8.dp),
@@ -210,6 +210,6 @@ private fun formatPriceObservationLine(
     observedAt: String,
 ): String {
     val priceText = formatReceiptSubtitle(null, price)
-    val dateText = formatReceiptSubtitle(observedAt.take(10), null)
+    val dateText = formatReceiptSubtitle(observedAt, null)
     return "$storeName · $priceText · $dateText"
 }
