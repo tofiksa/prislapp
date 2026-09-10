@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,8 +28,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil.compose.SubcomposeAsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.prislapp.R
@@ -144,6 +147,7 @@ fun ReceiptReviewScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    item { ReceiptReviewImage(uiState.localImagePath, uiState.imageUrl) }
                     if (uiState.status == "FAILED") {
                         item { OutlinedButton(onClick = viewModel::retryProcessing) { Text(stringResource(R.string.retry)) } }
                     }
@@ -244,6 +248,20 @@ fun ReceiptReviewScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ReceiptReviewImage(localImagePath: String?, imageUrl: String?) {
+    val model = localImagePath?.let { java.io.File(it) } ?: imageUrl
+    SubcomposeAsyncImage(
+        model = model,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier
+            .height(180.dp)
+            .fillMaxWidth(),
+        error = { Text(stringResource(R.string.image_unavailable)) },
+    )
 }
 
 @Composable

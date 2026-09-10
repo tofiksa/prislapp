@@ -13,6 +13,7 @@ import no.prislapp.data.remote.dto.StoreListResponse
 import no.prislapp.data.remote.dto.TokenResponse
 import no.prislapp.data.remote.dto.UserResponse
 import okhttp3.MultipartBody
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -23,6 +24,7 @@ import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 interface PrislappApi {
     @POST("auth/register")
@@ -59,6 +61,10 @@ interface PrislappApi {
 
     @GET("receipts/{id}")
     suspend fun getReceipt(@Path("id") id: String): ReceiptDetailResponse
+
+    @GET("receipts/{id}/image")
+    @Streaming
+    suspend fun getReceiptImage(@Path("id") id: String): ResponseBody
 
     @PUT("receipts/{id}/confirm")
     suspend fun confirmReceipt(
