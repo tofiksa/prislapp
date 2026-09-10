@@ -1,6 +1,5 @@
 package no.prislapp.ui.home
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,7 +16,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,8 +40,6 @@ fun HomeScreen(
     onCaptureReceipt: () -> Unit,
     onOpenReceipt: (receiptId: String) -> Unit,
     onOpenPending: (localId: Long) -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProductSearch: () -> Unit,
     onLogout: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -95,17 +91,9 @@ fun HomeScreen(
                 .padding(padding)
                 .padding(16.dp),
         ) {
-            item {
-                Column {
-                    TextButton(onClick = onOpenHistory) {
-                        Text(stringResource(R.string.history_title))
-                    }
-                    TextButton(onClick = onOpenProductSearch) {
-                        Text(stringResource(R.string.product_search_title))
-                    }
-                    if (uiState.isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
-                    }
+            if (uiState.isLoading) {
+                item {
+                    CircularProgressIndicator()
                 }
             }
 

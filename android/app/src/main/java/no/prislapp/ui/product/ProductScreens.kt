@@ -24,20 +24,22 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.prislapp.R
+import no.prislapp.ui.components.PrislappTopBar
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductSearchScreen(
     onOpenProduct: (productId: String) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     viewModel: ProductSearchViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.product_search_title)) },
-                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
+            PrislappTopBar(
+                title = stringResource(R.string.product_search_title),
+                onBack = onBack,
+            )
         },
     ) { padding ->
         Column(
