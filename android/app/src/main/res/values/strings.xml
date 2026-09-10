@@ -51,4 +51,17 @@
     <string name="cheapest_for_me_title">Billigst for meg</string>
     <string name="cheapest_price">Billigst hos %1$s: %2$s kr</string>
     <string name="all_observations">Alle observasjoner</string>
+    <string name="back">Tilbake</string>
+    <string name="retry">Prøv igjen</string>
+    <string name="refresh">Oppdater</string>
+    <string name="purchase_date">Kjøpsdato (dd.mm.åååå)</string>
+    <string name="delete_receipt">Slett kvittering</string>
+    <string name="delete_receipt_message">Kvitteringen, bildet og tilhørende prisobservasjoner slettes.</string>
+    <string name="ocr_text">Gjenkjent tekst</string>
+    <string name="no_receipts">Ingen kvitteringer funnet</string>
+    <string name="no_products">Ingen produkter funnet i dine bekreftede kvitteringer</string>
+    <string name="load_more">Vis flere</string>
+    <string name="latest_store_prices">Siste pris per butikk</string>
+    <string name="price_per_unit">Pris per stk / kg etter rabatt, basert på dine bekreftede kvitteringer.</string>
+    <string name="camera_guidance">Hold hele kvitteringen rett og godt belyst</string>
 </resources>

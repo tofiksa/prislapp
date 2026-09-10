@@ -19,6 +19,7 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
+        receiptRepository.resumePendingWork()
         observePending()
         refreshServerReceipts()
     }

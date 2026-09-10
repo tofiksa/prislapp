@@ -47,17 +47,23 @@ def _resize_for_ocr(image: Image.Image) -> Image.Image:
 
 def _result_to_text(result) -> str:
     txts = getattr(result, "txts", None)
-    if not txts:
+    if txts is None or len(txts) == 0:
         return ""
     boxes = getattr(result, "boxes", None)
     if boxes is None:
         return "\n".join(str(text) for text in txts if text)
 
-    lines = sorted(
-        zip(boxes, txts),
-        key=lambda item: (float(item[0][0][1]), float(item[0][0][0])),
-    )
-    return "\n".join(str(text) for _, text in lines if text)
+    tokens = []
+    for box, text in zip(boxes, txts):
+        ys = [float(point[1]) for point in box]
+        tokens.append((sum(ys) / len(ys), min(float(p[0]) for p in box), max(ys) - min(ys), str(text)))
+    rows = []
+    for token in sorted(tokens):
+        if rows and abs(token[0] - rows[-1][0][0]) <= max(1, min(token[2], rows[-1][0][2]) * 0.5):
+            rows[-1].append(token)
+        else:
+            rows.append([token])
+    return "\n".join(" ".join(t[3] for t in sorted(row, key=lambda t: t[1])) for row in rows)
 
 
 class OcrService:

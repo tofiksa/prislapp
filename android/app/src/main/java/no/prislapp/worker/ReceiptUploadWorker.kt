@@ -29,6 +29,8 @@ class ReceiptUploadWorker @AssistedInject constructor(
         for (entity in pending) {
             try {
                 receiptRepository.uploadPendingReceipt(entity)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
                 return Result.retry()
             }

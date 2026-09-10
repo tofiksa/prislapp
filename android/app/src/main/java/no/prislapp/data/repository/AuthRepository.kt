@@ -42,9 +42,11 @@ class AuthRepository @Inject constructor(
     private suspend fun authenticate(fetchTokens: suspend () -> no.prislapp.data.remote.dto.TokenResponse): Result<User> {
         return try {
             val tokens = fetchTokens()
+            val user = api.getMe("Bearer ${tokens.access_token}")
             tokenStore.saveTokens(tokens.access_token, tokens.refresh_token)
-            val user = api.getMe()
             Result.success(User(id = user.id, email = user.email))
+        } catch (exc: kotlinx.coroutines.CancellationException) {
+            throw exc
         } catch (exc: HttpException) {
             val message = when (exc.code()) {
                 401 -> "Ugyldig e-post eller passord"

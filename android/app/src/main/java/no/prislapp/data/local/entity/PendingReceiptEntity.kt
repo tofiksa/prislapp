@@ -11,6 +11,8 @@ data class PendingReceiptEntity(
     val serverReceiptId: String? = null,
     val status: String = STATUS_PENDING,
     val createdAt: Long = System.currentTimeMillis(),
+    val userId: String = "",
+    val captureId: String = java.util.UUID.randomUUID().toString(),
 ) {
     companion object {
         const val STATUS_PENDING = "PENDING"
@@ -19,5 +21,6 @@ data class PendingReceiptEntity(
         const val STATUS_PROCESSING = "PROCESSING"
         const val STATUS_READY_FOR_REVIEW = "READY_FOR_REVIEW"
         const val STATUS_FAILED = "FAILED"
+        const val STATUS_CONFIRMED = "CONFIRMED"
     }
 }

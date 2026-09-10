@@ -15,5 +15,8 @@ celery_app.conf.update(
     enable_utc=True,
     task_always_eager=settings.celery_task_always_eager,
     task_eager_propagates=settings.celery_task_always_eager,
+    beat_schedule={
+        "expire-receipt-images": {"task": "delete_expired_images", "schedule": 3600.0},
+    },
 )
 celery_app.autodiscover_tasks(["app.worker"])

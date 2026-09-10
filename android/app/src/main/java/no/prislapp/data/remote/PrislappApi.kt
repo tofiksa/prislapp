@@ -16,6 +16,7 @@ import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -34,11 +35,18 @@ interface PrislappApi {
     suspend fun googleAuth(@Body body: GoogleAuthRequest): TokenResponse
 
     @GET("auth/me")
-    suspend fun getMe(): UserResponse
+    suspend fun getMe(@Header("Authorization") authorization: String? = null): UserResponse
 
     @Multipart
     @POST("receipts")
-    suspend fun uploadReceipt(@Part file: MultipartBody.Part): ReceiptUploadResponse
+    suspend fun uploadReceipt(
+        @Part file: MultipartBody.Part,
+        @Header("Idempotency-Key") captureId: String,
+        @Header("X-Local-User") userId: String,
+    ): ReceiptUploadResponse
+
+    @POST("receipts/{id}/retry")
+    suspend fun retryReceipt(@Path("id") id: String): ReceiptUploadResponse
 
     @GET("receipts")
     suspend fun listReceipts(

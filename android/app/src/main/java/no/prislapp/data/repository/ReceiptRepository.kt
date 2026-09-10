@@ -4,6 +4,12 @@ import android.content.Context
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import no.prislapp.data.local.TokenStore
 import no.prislapp.data.local.dao.PendingReceiptDao
 import no.prislapp.data.local.entity.PendingReceiptEntity
 import no.prislapp.data.remote.PrislappApi
@@ -27,20 +33,25 @@ class ReceiptRepository @Inject constructor(
     private val api: PrislappApi,
     private val pendingReceiptDao: PendingReceiptDao,
     private val workManager: androidx.work.WorkManager,
+    private val tokenStore: TokenStore,
 ) {
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun observePendingReceipts(): Flow<List<PendingReceiptEntity>> {
-        return pendingReceiptDao.observeAll()
+        return tokenStore.userId.flatMapLatest { user ->
+            if (user == null) flowOf(emptyList()) else pendingReceiptDao.observeAll(user)
+        }
     }
 
     suspend fun queueReceiptCapture(imageFile: File): Long {
-        val entity = PendingReceiptEntity(imagePath = imageFile.absolutePath)
+        val entity = PendingReceiptEntity(imagePath = imageFile.absolutePath,
+            userId = checkNotNull(tokenStore.getUserId()) { "Logg inn før du tar bilde" })
         val id = pendingReceiptDao.insert(entity)
         ReceiptUploadWorker.enqueue(workManager)
         return id
     }
 
     suspend fun getPendingReceipt(id: Long): PendingReceiptEntity? {
-        return pendingReceiptDao.getById(id)
+        return pendingReceiptDao.getById(id)?.takeIf { it.userId == tokenStore.getUserId() }
     }
 
     suspend fun getReceiptDetail(receiptId: String): ReceiptDetailResponse {
@@ -78,6 +89,10 @@ class ReceiptRepository @Inject constructor(
 
     suspend fun deleteReceipt(receiptId: String) {
         api.deleteReceipt(receiptId)
+        pendingReceiptDao.getByServerReceiptId(receiptId)?.let {
+            withContext(Dispatchers.IO) { File(it.imagePath).delete() }
+            pendingReceiptDao.deleteById(it.id)
+        }
     }
 
     suspend fun listStores(): StoreListResponse {
@@ -85,6 +100,7 @@ class ReceiptRepository @Inject constructor(
     }
 
     suspend fun uploadPendingReceipt(entity: PendingReceiptEntity): ReceiptUploadResponse {
+        check(entity.userId == tokenStore.getUserId()) { "Kontoen er endret" }
         val file = File(entity.imagePath)
         require(file.exists()) { "Image file not found: ${entity.imagePath}" }
 
@@ -94,20 +110,29 @@ class ReceiptRepository @Inject constructor(
 
         val requestBody = file.asRequestBody("image/jpeg".toMediaType())
         val part = MultipartBody.Part.createFormData("file", file.name, requestBody)
-        val response = api.uploadReceipt(part)
+        val response = try {
+            api.uploadReceipt(part, entity.captureId, entity.userId)
+        } catch (e: Exception) {
+            withContext(kotlinx.coroutines.NonCancellable) {
+                pendingReceiptDao.update(entity.copy(status = PendingReceiptEntity.STATUS_PENDING))
+            }
+            throw e
+        }
 
         pendingReceiptDao.update(
             entity.copy(
                 serverReceiptId = response.id,
-                status = PendingReceiptEntity.STATUS_PROCESSING,
+                status = response.status,
             ),
         )
         ReceiptPollWorker.enqueue(workManager, response.id, entity.id)
+        withContext(Dispatchers.IO) { file.delete() }
         return response
     }
 
     suspend fun syncLocalStatus(serverReceiptId: String, status: String) {
         val entity = pendingReceiptDao.getByServerReceiptId(serverReceiptId) ?: return
+        if (entity.userId != tokenStore.getUserId()) return
         pendingReceiptDao.update(entity.copy(status = status))
     }
 
@@ -115,8 +140,9 @@ class ReceiptRepository @Inject constructor(
         return pendingReceiptDao.getByStatuses(
             listOf(
                 PendingReceiptEntity.STATUS_PENDING,
-                PendingReceiptEntity.STATUS_FAILED,
+                PendingReceiptEntity.STATUS_UPLOADING,
             ),
+            tokenStore.getUserId() ?: return emptyList(),
         )
     }
 
@@ -126,7 +152,43 @@ class ReceiptRepository @Inject constructor(
                 PendingReceiptEntity.STATUS_PROCESSING,
                 PendingReceiptEntity.STATUS_UPLOADED,
             ),
+            tokenStore.getUserId() ?: return emptyList(),
         )
+    }
+
+    suspend fun retryReceipt(localId: Long) {
+        val entity = getPendingReceipt(localId) ?: error("Kvittering ikke funnet")
+        if (entity.serverReceiptId != null) {
+            val response = api.retryReceipt(entity.serverReceiptId)
+            pendingReceiptDao.update(entity.copy(status = response.status))
+            ReceiptPollWorker.enqueue(workManager, response.id, entity.id)
+        } else {
+            pendingReceiptDao.update(entity.copy(status = PendingReceiptEntity.STATUS_PENDING))
+            ReceiptUploadWorker.enqueue(workManager)
+        }
+    }
+
+    suspend fun retryServerReceipt(receiptId: String) {
+        val response = api.retryReceipt(receiptId)
+        syncLocalStatus(receiptId, response.status)
+        ReceiptPollWorker.enqueueBackground(workManager)
+    }
+
+    fun resumePendingWork() {
+        ReceiptUploadWorker.enqueue(workManager)
+        ReceiptPollWorker.enqueueBackground(workManager)
+        no.prislapp.worker.ReceiptCleanupWorker.enqueue(workManager)
+    }
+
+    suspend fun deleteExpiredLocalImages() {
+        val cutoff = System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(30)
+        for (entity in pendingReceiptDao.getExpired(cutoff)) {
+            withContext(Dispatchers.IO) {
+                val file = File(entity.imagePath)
+                check(!file.exists() || file.delete()) { "Kunne ikke slette utløpt bilde" }
+            }
+            pendingReceiptDao.deleteById(entity.id)
+        }
     }
 
     fun createReceiptImageFile(): File {

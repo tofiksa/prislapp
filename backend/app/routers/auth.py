@@ -8,13 +8,30 @@ from app.schemas.auth import (
     GoogleAuthRequest,
     LoginRequest,
     RegisterRequest,
+    RefreshRequest,
     TokenResponse,
     UserResponse,
 )
 from app.services.auth_service import AuthService
 from app.services.google_auth import verify_google_id_token
+from app.security.jwt import decode_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        payload = decode_token(body.refresh_token)
+        if payload.get("type") != "refresh" or not isinstance(payload.get("sub"), str):
+            raise ValueError("Invalid refresh token")
+        service = AuthService(db)
+        user = await service.get_user_by_id(payload["sub"])
+        if user is None:
+            raise ValueError("Unknown user")
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Invalid refresh token") from exc
+    return service._token_response(user.id)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

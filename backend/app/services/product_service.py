@@ -1,6 +1,7 @@
 import re
 import unicodedata
 import uuid
+from difflib import SequenceMatcher
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,7 @@ def normalize_product_name(name: str) -> str:
     normalized = unicodedata.normalize("NFKD", name.lower())
     normalized = normalized.encode("ascii", "ignore").decode("ascii")
     normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    normalized = re.sub(r"(\d)\s+(kg|g|ml|cl|dl|l)\b", r"\1\2", normalized)
     return re.sub(r"\s+", " ", normalized).strip()
 
 
@@ -37,6 +39,25 @@ class ProductService:
         if alias:
             product = await self.db.get(Product, alias.product_id)
             if product:
+                return product
+
+        # Only merge a uniquely close spelling; preserve all numeric tokens (sizes/fat %).
+        candidates = (await self.db.execute(select(ProductAlias).where(
+            ProductAlias.alias_name.like(normalized[:4] + "%"),
+        ).limit(200))).scalars().all()
+        numbers = re.findall(r"\d+", normalized)
+        matches = {}
+        for candidate in candidates:
+            name = normalize_product_name(candidate.alias_name)
+            if len(normalized) >= 12 and re.findall(r"\d+", name) == numbers:
+                score = SequenceMatcher(None, normalized, name).ratio()
+                if score >= 0.95:
+                    matches[candidate.product_id] = max(score, matches.get(candidate.product_id, 0))
+        if len(matches) == 1:
+            product = await self.db.get(Product, next(iter(matches)))
+            if product:
+                self.db.add(ProductAlias(product_id=product.id, alias_name=normalized, store_id=store_id))
+                await self.db.flush()
                 return product
 
         product = Product(canonical_name=raw_name.strip())

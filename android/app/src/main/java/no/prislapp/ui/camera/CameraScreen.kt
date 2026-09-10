@@ -21,8 +21,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,7 +84,8 @@ fun CameraScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.camera_title)) })
+            TopAppBar(title = { Text(stringResource(R.string.camera_title)) },
+                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
         },
     ) { padding ->
         Box(
@@ -98,6 +101,7 @@ fun CameraScreen(
                     CameraPreviewContent(
                         onCapture = viewModel::onPhotoCaptured,
                         createOutputFile = viewModel::createOutputFile,
+                        onError = viewModel::onCaptureError,
                     )
                 }
                 else -> {
@@ -143,6 +147,7 @@ fun CameraScreen(
 private fun CameraPreviewContent(
     onCapture: (java.io.File) -> Unit,
     createOutputFile: () -> java.io.File,
+    onError: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -154,8 +159,14 @@ private fun CameraPreviewContent(
     }
     val imageCapture = remember { ImageCapture.Builder().build() }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var capturing by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        onDispose { provider?.unbindAll(); cameraExecutor.shutdown() }
+    }
 
     LaunchedEffect(previewView) {
+        try {
         val cameraProvider = suspendCancellableCoroutine { cont ->
             val future = ProcessCameraProvider.getInstance(context)
             future.addListener(
@@ -173,12 +184,15 @@ private fun CameraPreviewContent(
             it.surfaceProvider = previewView.surfaceProvider
         }
         cameraProvider.unbindAll()
+        provider = cameraProvider
         cameraProvider.bindToLifecycle(
             lifecycleOwner,
             CameraSelector.DEFAULT_BACK_CAMERA,
             preview,
             imageCapture,
         )
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (e: Exception) { onError(e.message ?: "Kunne ikke starte kamera") }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -186,8 +200,11 @@ private fun CameraPreviewContent(
             factory = { previewView },
             modifier = Modifier.fillMaxSize(),
         )
+        Text(stringResource(R.string.camera_guidance), modifier = Modifier.align(Alignment.TopCenter).padding(16.dp))
         Button(
+            enabled = !capturing && provider != null,
             onClick = {
+                capturing = true
                 val outputFile = createOutputFile()
                 val outputOptions = ImageCapture.OutputFileOptions.Builder(outputFile).build()
                 imageCapture.takePicture(
@@ -195,11 +212,15 @@ private fun CameraPreviewContent(
                     cameraExecutor,
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                            onCapture(outputFile)
+                            ContextCompat.getMainExecutor(context).execute { capturing = false; onCapture(outputFile) }
                         }
 
                         override fun onError(exception: ImageCaptureException) {
-                            // User can retry capture
+                            outputFile.delete()
+                            ContextCompat.getMainExecutor(context).execute {
+                                capturing = false
+                                onError(exception.message ?: "Kunne ikke ta bilde")
+                            }
                         }
                     },
                 )

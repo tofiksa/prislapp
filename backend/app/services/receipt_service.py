@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.models.product import PriceObservation
@@ -27,11 +28,12 @@ class ReceiptService:
         user: User,
         image_bytes: bytes,
         content_type: str = "image/jpeg",
+        receipt_id: uuid.UUID | None = None,
     ) -> Receipt:
-        receipt_id = uuid.uuid4()
+        receipt_id = receipt_id or uuid.uuid4()
         extension = "jpg" if "jpeg" in content_type else "png"
         object_name = f"{user.id}/{receipt_id}.{extension}"
-        self.storage.upload_receipt(object_name, image_bytes, content_type)
+        await run_in_threadpool(self.storage.upload_receipt, object_name, image_bytes, content_type)
 
         receipt = Receipt(
             id=receipt_id,
@@ -149,6 +151,8 @@ class ReceiptService:
         receipt.total = total
         receipt.status = ReceiptStatus.READY_FOR_REVIEW.value
 
+        await self.db.execute(delete(ReceiptItem).where(ReceiptItem.receipt_id == receipt.id))
+
         for item in items:
             self.db.add(
                 ReceiptItem(
@@ -187,6 +191,7 @@ class ReceiptService:
         if store_name:
             store = await self.get_or_create_store(store_name, None)
             receipt.store_id = store.id
+            receipt.store = store
         store = receipt.store
 
         if purchase_date is not None:
@@ -226,13 +231,14 @@ class ReceiptService:
                         product_id=product.id,
                         store_id=store_id,
                         receipt_item_id=receipt_item.id,
-                        price=item["line_total"],
+                        price=(item["line_total"] / item["quantity"]).quantize(Decimal("0.01")),
                         observed_at=observed_at,
                     ),
                 )
 
         receipt.status = ReceiptStatus.CONFIRMED.value
         await self.db.commit()
+        self.db.expire(receipt, ["items", "store"])
         return await self.get_receipt_for_user(receipt_id, user_id)
 
     async def delete_receipt(
@@ -243,6 +249,9 @@ class ReceiptService:
         receipt = await self.get_receipt_for_user(receipt_id, user_id)
         if not receipt:
             return False
+
+        if receipt.image_path:
+            await run_in_threadpool(self.storage.delete_receipt, receipt.image_path)
 
         item_ids = [item.id for item in receipt.items]
         if item_ids:
@@ -255,6 +264,19 @@ class ReceiptService:
         await self.db.delete(receipt)
         await self.db.commit()
         return True
+
+    async def delete_expired_images(self) -> int:
+        result = await self.db.execute(select(Receipt).where(
+            Receipt.image_expires_at <= datetime.now(timezone.utc),
+            Receipt.image_path != "",
+        ))
+        count = 0
+        for receipt in result.scalars():
+            await run_in_threadpool(self.storage.delete_receipt, receipt.image_path)
+            receipt.image_path = ""
+            count += 1
+        await self.db.commit()
+        return count
 
     async def list_stores_for_user(self, user_id: uuid.UUID) -> list[Store]:
         result = await self.db.execute(

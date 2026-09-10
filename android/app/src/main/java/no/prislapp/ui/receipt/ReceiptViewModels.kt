@@ -18,6 +18,13 @@ import no.prislapp.data.remote.dto.ReceiptDetailResponse
 import no.prislapp.data.repository.ReceiptRepository
 import java.math.BigDecimal
 import java.util.UUID
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 data class ReceiptProcessingUiState(
@@ -39,13 +46,15 @@ class ReceiptProcessingViewModel @Inject constructor(
         ReceiptProcessingUiState(localId = localId),
     )
     val uiState: StateFlow<ReceiptProcessingUiState> = _uiState.asStateFlow()
+    private var pollingJob: Job? = null
 
     init {
         startPolling()
     }
 
     private fun startPolling() {
-        viewModelScope.launch {
+        pollingJob?.cancel()
+        pollingJob = viewModelScope.launch {
             while (isActive) {
                 val pending = receiptRepository.getPendingReceipt(localId)
                 if (pending == null) {
@@ -62,6 +71,11 @@ class ReceiptProcessingViewModel @Inject constructor(
                     )
                 }
 
+                if (pending.status == PendingReceiptEntity.STATUS_CONFIRMED) {
+                    _uiState.update { it.copy(isPolling = false) }
+                    break
+                }
+
                 val serverReceiptId = pending.serverReceiptId
                 if (serverReceiptId != null) {
                     try {
@@ -76,6 +90,7 @@ class ReceiptProcessingViewModel @Inject constructor(
                             _uiState.update { it.copy(isPolling = false) }
                             break
                         }
+                    } catch (e: CancellationException) { throw e
                     } catch (e: Exception) {
                         _uiState.update {
                             it.copy(error = e.message ?: "Polling feilet")
@@ -85,6 +100,17 @@ class ReceiptProcessingViewModel @Inject constructor(
 
                 delay(POLL_INTERVAL_MS)
             }
+        }
+    }
+
+    fun retry() {
+        viewModelScope.launch {
+            try {
+                receiptRepository.retryReceipt(localId)
+                _uiState.update { it.copy(isPolling = true, error = null) }
+                startPolling()
+            } catch (e: CancellationException) { throw e
+            } catch (e: Exception) { _uiState.update { it.copy(error = e.message) } }
         }
     }
 
@@ -112,6 +138,10 @@ data class ReceiptReviewUiState(
     val items: List<EditableReceiptItem> = emptyList(),
     val isConfirmed: Boolean = false,
     val error: String? = null,
+    val purchaseDate: String = "",
+    val rawOcrText: String = "",
+    val status: String = "",
+    val isDeleted: Boolean = false,
 )
 
 @HiltViewModel
@@ -133,7 +163,7 @@ class ReceiptReviewViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val receipt = receiptRepository.getReceiptDetail(receiptId)
-                _uiState.update { it.copy(isLoading = false, isReadOnly = receipt.status == "CONFIRMED") }
+                _uiState.update { it.copy(isLoading = false, isReadOnly = receipt.status != "READY_FOR_REVIEW", status = receipt.status) }
                 applyReceipt(receipt)
             } catch (e: Exception) {
                 _uiState.update {
@@ -150,6 +180,11 @@ class ReceiptReviewViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 storeName = receipt.store?.name.orEmpty(),
+                purchaseDate = receipt.purchase_date?.let { date ->
+                    runCatching { OffsetDateTime.parse(date).atZoneSameInstant(ZoneId.of("Europe/Oslo")).toLocalDate().format(dateFormat) }
+                        .getOrElse { date.take(10) }
+                }.orEmpty(),
+                rawOcrText = receipt.raw_ocr_text.orEmpty(),
                 total = receipt.total?.toPlainString().orEmpty(),
                 items = receipt.items.map { item ->
                     EditableReceiptItem(
@@ -170,6 +205,39 @@ class ReceiptReviewViewModel @Inject constructor(
 
     fun updateTotal(value: String) {
         _uiState.update { it.copy(total = value) }
+    }
+
+    fun updatePurchaseDate(value: String) { _uiState.update { it.copy(purchaseDate = value) } }
+
+    fun deleteReceipt() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true, error = null) }
+            try {
+                receiptRepository.deleteReceipt(receiptId)
+                _uiState.update { it.copy(isSaving = false, isDeleted = true) }
+            } catch (e: CancellationException) { throw e
+            } catch (e: Exception) { _uiState.update { it.copy(isSaving = false, error = e.message) } }
+        }
+    }
+
+    fun retryProcessing() {
+        viewModelScope.launch {
+            try {
+                receiptRepository.retryServerReceipt(receiptId)
+                loadReceipt()
+            } catch (e: CancellationException) { throw e
+            } catch (e: Exception) { _uiState.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun reload() = loadReceipt()
+
+    private fun decimal(value: String, label: String): BigDecimal =
+        value.trim().replace(',', '.').toBigDecimalOrNull()
+            ?.takeIf { it >= BigDecimal.ZERO } ?: throw IllegalArgumentException("Ugyldig $label")
+
+    companion object {
+        private val dateFormat = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
     }
 
     fun updateItem(localId: String, transform: (EditableReceiptItem) -> EditableReceiptItem) {
@@ -196,6 +264,7 @@ class ReceiptReviewViewModel @Inject constructor(
 
     fun confirmReceipt() {
         val state = _uiState.value
+        if (state.isSaving || state.isReadOnly) return
         if (state.items.isEmpty()) {
             _uiState.update { it.copy(error = "Legg til minst én varelinje") }
             return
@@ -206,15 +275,17 @@ class ReceiptReviewViewModel @Inject constructor(
             try {
                 val request = ReceiptConfirmRequest(
                     store_name = state.storeName.ifBlank { null },
-                    total = state.total.toBigDecimalOrNull(),
+                    purchase_date = state.purchaseDate.takeIf { it.isNotBlank() }?.let {
+                        LocalDate.parse(it, dateFormat).atStartOfDay(ZoneId.of("Europe/Oslo")).toInstant().toString()
+                    },
+                    total = state.total.takeIf { it.isNotBlank() }?.let { decimal(it, "total") },
                     items = state.items.map { item ->
                         ReceiptConfirmItemRequest(
                             id = item.serverId,
-                            raw_product_name = item.name,
-                            quantity = item.quantity.toBigDecimalOrNull() ?: BigDecimal.ONE,
-                            unit_price = item.unitPrice.toBigDecimalOrNull(),
-                            line_total = item.lineTotal.toBigDecimalOrNull()
-                                ?: throw IllegalArgumentException("Ugyldig linjepris for ${item.name}"),
+                            raw_product_name = item.name.trim().also { require(it.isNotBlank()) { "Varenavn mangler" } },
+                            quantity = decimal(item.quantity, "antall").also { require(it > BigDecimal.ZERO) { "Antall må være større enn null" } },
+                            unit_price = item.unitPrice.takeIf { it.isNotBlank() }?.let { decimal(it, "enhetspris") },
+                            line_total = decimal(item.lineTotal, "linjepris for ${item.name}"),
                         )
                     },
                 )

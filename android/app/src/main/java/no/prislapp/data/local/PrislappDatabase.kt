@@ -7,7 +7,7 @@ import no.prislapp.data.local.entity.PendingReceiptEntity
 
 @Database(
     entities = [PendingReceiptEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class PrislappDatabase : RoomDatabase() {

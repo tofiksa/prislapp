@@ -3,16 +3,17 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from app.parsers.base import ParsedReceipt, ParsedReceiptItem
+from app.parsers.generic import parse_date
 
 
 REMA_HEADER_PATTERN = re.compile(r"(?i)rema\s*1000")
 REMA_DATE_PATTERN = re.compile(r"(\d{2})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2})")
 REMA_STORE_LINE_PATTERN = re.compile(r"(?i)^rema\s*1000\s+(.+)$")
 REMA_PRODUCT_LINE_PATTERN = re.compile(
-    r"^(.+?)\s+(15|25)\s+(\d+[,.]\d{2})\s*$",
+    r"^(.+?)\s+(15|25)%?\s+(\d+[,.]\d{2})\s*$",
 )
 REMA_WEIGHT_LINE_PATTERN = re.compile(
-    r"^\s*(\d+[,.]?\d*)\s*kg\s*x\s*kr\s*(\d+[,.]\d{2})\s*$",
+    r"^\s*(\d+[,.]?\d*)\s*kg\s*[x×]\s*kr\s*(\d+[,.]\d{2})\s*$",
     re.IGNORECASE,
 )
 REMA_TOTAL_PATTERN = re.compile(r"(?i)sum\s+\d+\s+varer\s+(\d+[,.]\d{2})")
@@ -29,12 +30,7 @@ def _parse_norwegian_decimal(value: str) -> Decimal:
 
 
 def _parse_rema_date(text: str) -> datetime | None:
-    match = REMA_DATE_PATTERN.search(text)
-    if not match:
-        return None
-    day, month, year, hour, minute = match.groups()
-    full_year = 2000 + int(year)
-    return datetime(full_year, int(month), int(day), int(hour), int(minute))
+    return parse_date(text)
 
 
 def _extract_store_name(lines: list[str]) -> str | None:

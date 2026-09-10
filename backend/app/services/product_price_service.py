@@ -88,7 +88,8 @@ class ProductPriceService:
 
         latest_by_store: dict[uuid.UUID, LatestStorePriceResponse] = {}
         for observation, store in rows:
-            if store.id not in latest_by_store:
+            if (store.id not in latest_by_store or
+                    observation.observed_at > latest_by_store[store.id].observed_at):
                 latest_by_store[store.id] = LatestStorePriceResponse(
                     store=StoreResponse(
                         id=str(store.id),

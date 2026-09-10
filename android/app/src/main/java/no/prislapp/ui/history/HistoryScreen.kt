@@ -86,7 +86,8 @@ fun HistoryScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.history_title)) })
+            TopAppBar(title = { Text(stringResource(R.string.history_title)) },
+                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
         },
     ) { padding ->
         LazyColumn(
@@ -162,6 +163,9 @@ fun HistoryScreen(
             if (uiState.isLoading) {
                 item { CircularProgressIndicator() }
             }
+            if (!uiState.isLoading && uiState.receipts.isEmpty()) {
+                item { Text(stringResource(R.string.no_receipts)) }
+            }
 
             items(uiState.receipts, key = { it.id }) { receipt ->
                 OutlinedButton(
@@ -183,15 +187,21 @@ fun HistoryScreen(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+                item { OutlinedButton(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } }
+            }
+            if (uiState.hasMore) {
+                item { OutlinedButton(onClick = viewModel::loadMore, enabled = !uiState.isLoading) {
+                    Text(stringResource(R.string.load_more))
+                } }
             }
         }
     }
 }
 
 private fun LocalDate.toEpochMillis(): Long {
-    return atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    return atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
 }
 
 private fun Long.toLocalDate(): LocalDate {
-    return Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
+    return Instant.ofEpochMilli(this).atZone(ZoneId.of("UTC")).toLocalDate()
 }

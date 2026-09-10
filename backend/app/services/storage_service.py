@@ -20,8 +20,7 @@ class StorageService:
 
     def is_available(self) -> bool:
         try:
-            self.client.bucket_exists(settings.minio_bucket)
-            return True
+            return self.client.bucket_exists(settings.minio_bucket)
         except Exception:
             return False
 
@@ -39,6 +38,9 @@ class StorageService:
             content_type=content_type,
         )
         return object_name
+
+    def delete_receipt(self, object_name: str) -> None:
+        self.client.remove_object(settings.minio_bucket, object_name)
 
     def download_receipt(self, object_name: str) -> bytes:
         response = self.client.get_object(settings.minio_bucket, object_name)

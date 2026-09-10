@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ReceiptItemResponse(BaseModel):
@@ -52,17 +52,24 @@ class ReceiptUploadResponse(BaseModel):
 
 class ReceiptConfirmItem(BaseModel):
     id: str | None = None
-    raw_product_name: str
-    quantity: Decimal
-    unit_price: Decimal | None = None
-    line_total: Decimal
+    raw_product_name: str = Field(min_length=1, max_length=512)
+    quantity: Decimal = Field(gt=0, max_digits=10, decimal_places=3)
+    unit_price: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
+    line_total: Decimal = Field(ge=0, max_digits=10, decimal_places=2)
+
+    @field_validator("raw_product_name")
+    @classmethod
+    def nonblank_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Product name cannot be blank")
+        return value.strip()
 
 
 class ReceiptConfirmRequest(BaseModel):
-    store_name: str | None = None
+    store_name: str | None = Field(default=None, max_length=255)
     purchase_date: datetime | None = None
-    total: Decimal | None = None
-    items: list[ReceiptConfirmItem]
+    total: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
+    items: list[ReceiptConfirmItem] = Field(min_length=1, max_length=500)
 
 
 class ProductSummaryResponse(BaseModel):

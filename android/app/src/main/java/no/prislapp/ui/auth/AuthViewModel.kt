@@ -30,9 +30,7 @@ class AuthViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             authRepository.isLoggedIn.collect { loggedIn ->
-                if (loggedIn && !_uiState.value.isLoggedIn) {
-                    _uiState.update { it.copy(isLoggedIn = true) }
-                }
+                _uiState.update { it.copy(isLoggedIn = loggedIn, user = if (loggedIn) it.user else null) }
             }
         }
     }

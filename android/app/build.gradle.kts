@@ -19,7 +19,7 @@ val localProperties = Properties().apply {
 // Override in android/local.properties for local dev, e.g.:
 //   api.base.url=http://10.0.2.2:8000/          (emulator → localhost)
 //   api.base.url=http://192.168.86.x:8000/      (phone → machine on Wi-Fi)
-val apiBaseUrl = localProperties.getProperty("api.base.url")
+val apiBaseUrl = providers.gradleProperty("apiBaseUrl").orNull ?: localProperties.getProperty("api.base.url")
     ?: "https://prislapp-api.sliplane.app/"
 
 android {
@@ -116,6 +116,12 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.room:room-testing:2.7.1")
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

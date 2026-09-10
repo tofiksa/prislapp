@@ -31,11 +31,13 @@ fun PrislappNavHost(
     LaunchedEffect(uiState.isLoggedIn) {
         if (uiState.isLoggedIn) {
             navController.navigate(Routes.HOME) {
-                popUpTo(Routes.LOGIN) { inclusive = true }
+                popUpTo(navController.graph.id) { inclusive = true }
+                launchSingleTop = true
             }
         } else {
             navController.navigate(Routes.LOGIN) {
-                popUpTo(Routes.HOME) { inclusive = true }
+                popUpTo(navController.graph.id) { inclusive = true }
+                launchSingleTop = true
             }
         }
     }
@@ -48,22 +50,14 @@ fun PrislappNavHost(
             LoginScreen(
                 viewModel = authViewModel,
                 onNavigateToRegister = { navController.navigate(Routes.REGISTER) },
-                onLoggedIn = {
-                    navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.LOGIN) { inclusive = true }
-                    }
-                },
+                onLoggedIn = {},
             )
         }
         composable(Routes.REGISTER) {
             RegisterScreen(
                 viewModel = authViewModel,
                 onNavigateToLogin = { navController.popBackStack() },
-                onRegistered = {
-                    navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.LOGIN) { inclusive = true }
-                    }
-                },
+                onRegistered = {},
             )
         }
         composable(Routes.HOME) {

@@ -17,9 +17,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -49,7 +54,8 @@ fun ReceiptProcessingScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.processing_title)) })
+            TopAppBar(title = { Text(stringResource(R.string.processing_title)) },
+                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
         },
     ) { padding ->
         Column(
@@ -72,6 +78,9 @@ fun ReceiptProcessingScreen(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
+            if (uiState.status == PendingReceiptEntity.STATUS_FAILED || uiState.error != null) {
+                OutlinedButton(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) }
+            }
         }
     }
 }
@@ -84,6 +93,24 @@ fun ReceiptReviewScreen(
     viewModel: ReceiptReviewViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.delete_receipt)) },
+            text = { Text(stringResource(R.string.delete_receipt_message)) },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; viewModel.deleteReceipt() }) {
+                Text(stringResource(R.string.delete_receipt))
+            } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.select_date_cancel)) } })
+    }
+    LaunchedEffect(uiState.isDeleted) { if (uiState.isDeleted) onConfirmed() }
+    LaunchedEffect(uiState.status) {
+        while (uiState.status == "UPLOADED" || uiState.status == "PROCESSING") {
+            kotlinx.coroutines.delay(3_000)
+            viewModel.reload()
+        }
+    }
 
     LaunchedEffect(uiState.isConfirmed) {
         if (uiState.isConfirmed) {
@@ -93,7 +120,8 @@ fun ReceiptReviewScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.review_title)) })
+            TopAppBar(title = { Text(stringResource(R.string.review_title)) },
+                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
         },
     ) { padding ->
         when {
@@ -116,6 +144,18 @@ fun ReceiptReviewScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    if (uiState.status == "FAILED") {
+                        item { OutlinedButton(onClick = viewModel::retryProcessing) { Text(stringResource(R.string.retry)) } }
+                    }
+                    if (uiState.status == "PROCESSING" || uiState.status == "UPLOADED") {
+                        item { Text(stringResource(R.string.processing_status, uiState.status)) }
+                    }
+                    item {
+                        OutlinedTextField(value = uiState.purchaseDate,
+                            onValueChange = viewModel::updatePurchaseDate,
+                            label = { Text(stringResource(R.string.purchase_date)) },
+                            modifier = Modifier.fillMaxWidth(), readOnly = uiState.isReadOnly, singleLine = true)
+                    }
                     item {
                         OutlinedTextField(
                             value = uiState.storeName,
@@ -181,6 +221,15 @@ fun ReceiptReviewScreen(
                                     },
                                 )
                             }
+                        }
+                    }
+                    if (uiState.rawOcrText.isNotBlank()) {
+                        item { Text(stringResource(R.string.ocr_text), style = MaterialTheme.typography.titleMedium) }
+                        item { Text(uiState.rawOcrText) }
+                    }
+                    item {
+                        OutlinedButton(onClick = { confirmDelete = true }, enabled = !uiState.isSaving) {
+                            Text(stringResource(R.string.delete_receipt))
                         }
                     }
                     uiState.error?.let { error ->

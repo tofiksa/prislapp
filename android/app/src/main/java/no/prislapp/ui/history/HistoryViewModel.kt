@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import no.prislapp.data.remote.dto.ReceiptSummaryResponse
 import no.prislapp.data.remote.dto.StoreResponse
 import no.prislapp.data.repository.ReceiptRepository
@@ -25,6 +27,8 @@ data class HistoryUiState(
     val toDate: LocalDate? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
+    val page: Int = 0,
+    val hasMore: Boolean = false,
 ) {
     val fromDateLabel: String?
         get() = fromDate?.format(displayFormatter)
@@ -46,6 +50,7 @@ class HistoryViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
+    private var loadJob: Job? = null
 
     init {
         loadStores()
@@ -95,12 +100,17 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
-    private fun loadReceipts() {
-        viewModelScope.launch {
+    fun loadMore() { if (!_uiState.value.isLoading && _uiState.value.hasMore) loadReceipts(append = true) }
+    fun reload() = loadReceipts()
+
+    private fun loadReceipts(append: Boolean = false) {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val state = _uiState.value
                 val response = receiptRepository.listReceiptsFiltered(
+                    page = if (append) state.page + 1 else 1,
                     storeId = state.selectedStoreId,
                     status = "CONFIRMED",
                     fromDate = state.fromDate?.toStartOfDayIso(),
@@ -109,9 +119,12 @@ class HistoryViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        receipts = response.items,
+                        receipts = if (append) (state.receipts + response.items).distinctBy { r -> r.id } else response.items,
+                        page = response.page,
+                        hasMore = response.page * response.page_size < response.total,
                     )
                 }
+            } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -124,10 +137,10 @@ class HistoryViewModel @Inject constructor(
     }
 
     private fun LocalDate.toStartOfDayIso(): String {
-        return atStartOfDay(ZoneId.systemDefault()).toInstant().toString()
+        return atStartOfDay(ZoneId.of("Europe/Oslo")).toInstant().toString()
     }
 
     private fun LocalDate.toEndOfDayIso(): String {
-        return atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant().toString()
+        return plusDays(1).atStartOfDay(ZoneId.of("Europe/Oslo")).minusNanos(1).toInstant().toString()
     }
 }

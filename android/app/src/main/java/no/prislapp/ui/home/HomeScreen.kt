@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -35,18 +36,23 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshServerReceipts()
+        onPauseOrDispose { }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(title = { Text(stringResource(R.string.home_title)) })
         },
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
         ) {
+            item {
             Text(text = stringResource(R.string.welcome))
 
             OutlinedButton(
@@ -73,14 +79,16 @@ fun HomeScreen(
             if (uiState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
             }
+            }
 
             if (uiState.pendingReceipts.isNotEmpty()) {
+                item {
                 Text(
                     text = stringResource(R.string.upload_queue),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 24.dp),
                 )
-                LazyColumn {
+                }
                     items(uiState.pendingReceipts, key = { it.id }) { pending ->
                         OutlinedButton(
                             onClick = {
@@ -97,16 +105,16 @@ fun HomeScreen(
                             Text("${pending.status} (#${pending.id})")
                         }
                     }
-                }
             }
 
             if (uiState.serverReceipts.isNotEmpty()) {
+                item {
                 Text(
                     text = stringResource(R.string.recent_receipts),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 24.dp),
                 )
-                LazyColumn {
+                }
                     items(uiState.serverReceipts, key = { it.id }) { receipt ->
                         OutlinedButton(
                             onClick = { onOpenReceipt(receipt.id) },
@@ -115,9 +123,9 @@ fun HomeScreen(
                             Text("${receipt.store?.name ?: "?"} – ${receipt.status}")
                         }
                     }
-                }
             }
 
+            item {
             uiState.error?.let { error ->
                 Text(
                     text = error,
@@ -131,6 +139,7 @@ fun HomeScreen(
                 modifier = Modifier.padding(top = 24.dp),
             ) {
                 Text(stringResource(R.string.logout))
+            }
             }
         }
     }

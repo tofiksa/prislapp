@@ -15,6 +15,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -35,7 +36,8 @@ fun ProductSearchScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.product_search_title)) })
+            TopAppBar(title = { Text(stringResource(R.string.product_search_title)) },
+                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
         },
     ) { padding ->
         Column(
@@ -61,6 +63,9 @@ fun ProductSearchScreen(
 
             if (uiState.isSearching) {
                 CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
+            }
+            if (uiState.hasSearched && uiState.results.isEmpty()) {
+                Text(stringResource(R.string.no_products))
             }
 
             LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
@@ -97,7 +102,8 @@ fun ProductPricesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.cheapest_for_me_title)) })
+            TopAppBar(title = { Text(stringResource(R.string.cheapest_for_me_title)) },
+                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
         },
     ) { padding ->
         Column(
@@ -125,17 +131,18 @@ fun ProductPricesScreen(
                             modifier = Modifier.padding(top = 16.dp),
                         )
                     }
-                    Text(
-                        text = stringResource(R.string.all_observations),
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(top = 24.dp),
-                    )
                     LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
-                        items(prices.observations, key = {
-                            "${it.store.id}-${it.observed_at}-${it.price}"
-                        }) { observation ->
+                        item { Text(stringResource(R.string.price_per_unit)) }
+                        item { Text(stringResource(R.string.latest_store_prices), style = MaterialTheme.typography.titleSmall) }
+                        items(prices.latest_by_store) { observation ->
+                            Text("${observation.store.name}: ${observation.price.toPlainString()} kr (${observation.observed_at.take(10)})",
+                                modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                        item { Text(stringResource(R.string.all_observations), style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = 16.dp)) }
+                        items(prices.observations) { observation ->
                             Text(
-                                text = "${observation.store.name}: ${observation.price.toPlainString()} kr",
+                                text = "${observation.store.name}: ${observation.price.toPlainString()} kr (${observation.observed_at.take(10)})",
                                 modifier = Modifier.padding(vertical = 4.dp),
                             )
                         }

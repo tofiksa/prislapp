@@ -11,6 +11,7 @@ from app.models.receipt_item import ReceiptItem
 from app.models.store import Store
 from app.models.user import User
 from app.services.receipt_service import ReceiptService
+from tests.test_phase23 import image_bytes
 
 
 @pytest.fixture(autouse=True)
@@ -81,7 +82,7 @@ async def test_upload_and_get_receipt(client: AsyncClient):
     upload = await client.post(
         "/receipts",
         headers=headers,
-        files={"file": ("receipt.jpg", b"fake-jpeg-content", "image/jpeg")},
+        files={"file": ("receipt.jpg", image_bytes(), "image/jpeg")},
     )
     assert upload.status_code == 201
     body = upload.json()
