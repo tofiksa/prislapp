@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
@@ -22,6 +22,7 @@ from app.schemas.receipt import (
     StoreResponse,
 )
 from app.services.receipt_service import ReceiptService
+from app.services.storage_service import StorageService
 from app.worker.tasks import process_receipt
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
@@ -159,6 +160,22 @@ async def get_receipt(
     if not receipt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
     return _to_detail(receipt)
+
+
+@router.get("/{receipt_id}/image")
+async def get_receipt_image(
+    receipt_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    receipt = await ReceiptService(db).get_receipt_for_user(receipt_id, current_user.id)
+    if not receipt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
+    expires = receipt.image_expires_at.replace(tzinfo=timezone.utc) if receipt.image_expires_at.tzinfo is None else receipt.image_expires_at
+    if not receipt.image_path or expires <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Original image expired")
+    data = await run_in_threadpool(StorageService().download_receipt, receipt.image_path)
+    return Response(content=data, media_type="image/jpeg")
 
 
 @router.put("/{receipt_id}/confirm", response_model=ReceiptDetailResponse)
