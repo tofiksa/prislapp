@@ -55,8 +55,16 @@ class ReceiptRepository @Inject constructor(
         page: Int = 1,
         storeId: String? = null,
         status: String? = null,
+        fromDate: String? = null,
+        toDate: String? = null,
     ): ReceiptListResponse {
-        return api.listReceipts(page = page, storeId = storeId, status = status)
+        return api.listReceipts(
+            page = page,
+            storeId = storeId,
+            status = status,
+            fromDate = fromDate,
+            toDate = toDate,
+        )
     }
 
     suspend fun confirmReceipt(

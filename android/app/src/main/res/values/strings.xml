@@ -38,6 +38,12 @@
     <string name="recent_receipts">Siste kvitteringer</string>
     <string name="history_title">Historikk</string>
     <string name="filter_by_store">Filtrer på butikk</string>
+    <string name="filter_by_date">Filtrer på dato</string>
+    <string name="from_date">Fra dato</string>
+    <string name="to_date">Til dato</string>
+    <string name="clear_date_filter">Nullstill datofilter</string>
+    <string name="select_date_confirm">Velg</string>
+    <string name="select_date_cancel">Avbryt</string>
     <string name="all_stores">Alle butikker</string>
     <string name="product_search_title">Produktsøk</string>
     <string name="search_products">Søk etter produkt</string>

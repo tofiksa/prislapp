@@ -45,6 +45,8 @@ interface PrislappApi {
         @Query("page") page: Int = 1,
         @Query("store_id") storeId: String? = null,
         @Query("status") status: String? = null,
+        @Query("from_date") fromDate: String? = null,
+        @Query("to_date") toDate: String? = null,
     ): ReceiptListResponse
 
     @GET("receipts/{id}")
