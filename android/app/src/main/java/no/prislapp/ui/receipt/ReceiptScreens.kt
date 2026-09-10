@@ -1,6 +1,8 @@
 package no.prislapp.ui.receipt
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,17 +11,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,9 +37,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import coil.compose.SubcomposeAsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.SubcomposeAsyncImage
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import no.prislapp.R
 import no.prislapp.data.local.entity.PendingReceiptEntity
 import no.prislapp.ui.components.PrislappTopBar
@@ -105,6 +115,8 @@ fun ReceiptReviewScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showOcr by remember { mutableStateOf(false) }
 
     if (confirmDelete) {
         AlertDialog(onDismissRequest = { confirmDelete = false },
@@ -113,7 +125,34 @@ fun ReceiptReviewScreen(
             confirmButton = { TextButton(onClick = { confirmDelete = false; viewModel.deleteReceipt() }) {
                 Text(stringResource(R.string.delete_receipt))
             } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.select_date_cancel)) } })
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) } })
+    }
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = uiState.purchaseDate.toLocalDateOrNull()?.toEpochMillis(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.toLocalDate()?.let { selected ->
+                            viewModel.updatePurchaseDate(selected.format(purchaseDateFormatter))
+                        }
+                        showDatePicker = false
+                    },
+                ) {
+                    Text(stringResource(R.string.select_date_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text(stringResource(R.string.select_date_cancel))
+                }
+            },
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
     LaunchedEffect(uiState.isDeleted) { if (uiState.isDeleted) onConfirmed() }
     LaunchedEffect(uiState.status) {
@@ -163,10 +202,23 @@ fun ReceiptReviewScreen(
                         item { Text(stringResource(R.string.processing_status, uiState.status)) }
                     }
                     item {
-                        OutlinedTextField(value = uiState.purchaseDate,
-                            onValueChange = viewModel::updatePurchaseDate,
-                            label = { Text(stringResource(R.string.purchase_date)) },
-                            modifier = Modifier.fillMaxWidth(), readOnly = uiState.isReadOnly, singleLine = true)
+                        Box {
+                            OutlinedTextField(
+                                value = uiState.purchaseDate,
+                                onValueChange = {},
+                                label = { Text(stringResource(R.string.purchase_date)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                readOnly = true,
+                                singleLine = true,
+                            )
+                            if (!uiState.isReadOnly) {
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable { showDatePicker = true },
+                                )
+                            }
+                        }
                     }
                     item {
                         OutlinedTextField(
@@ -215,7 +267,7 @@ fun ReceiptReviewScreen(
                     }
                     if (!uiState.isReadOnly) {
                         item {
-                            OutlinedButton(onClick = viewModel::addItem) {
+                            TextButton(onClick = viewModel::addItem) {
                                 Text(stringResource(R.string.add_item))
                             }
                         }
@@ -236,8 +288,18 @@ fun ReceiptReviewScreen(
                         }
                     }
                     if (uiState.rawOcrText.isNotBlank()) {
-                        item { Text(stringResource(R.string.ocr_text), style = MaterialTheme.typography.titleMedium) }
-                        item { Text(uiState.rawOcrText) }
+                        item {
+                            TextButton(onClick = { showOcr = !showOcr }) {
+                                Text(
+                                    stringResource(
+                                        if (showOcr) R.string.hide_ocr else R.string.show_ocr,
+                                    ),
+                                )
+                            }
+                        }
+                        if (showOcr) {
+                            item { Text(uiState.rawOcrText) }
+                        }
                     }
                     item {
                         OutlinedButton(onClick = { confirmDelete = true }, enabled = !uiState.isSaving) {
@@ -282,48 +344,66 @@ private fun ReceiptItemEditor(
     onLineTotalChange: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedTextField(
-            value = item.name,
-            onValueChange = onNameChange,
-            label = { Text(stringResource(R.string.item_name)) },
-            modifier = Modifier.fillMaxWidth(),
-            readOnly = readOnly,
-            singleLine = true,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             OutlinedTextField(
-                value = item.quantity,
-                onValueChange = onQuantityChange,
-                label = { Text(stringResource(R.string.item_quantity)) },
-                modifier = Modifier.weight(1f),
+                value = item.name,
+                onValueChange = onNameChange,
+                label = { Text(stringResource(R.string.item_name)) },
+                modifier = Modifier.fillMaxWidth(),
                 readOnly = readOnly,
                 singleLine = true,
             )
-            OutlinedTextField(
-                value = item.unitPrice,
-                onValueChange = onUnitPriceChange,
-                label = { Text(stringResource(R.string.item_unit_price)) },
-                modifier = Modifier.weight(1f),
-                readOnly = readOnly,
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = item.lineTotal,
-                onValueChange = onLineTotalChange,
-                label = { Text(stringResource(R.string.item_line_total)) },
-                modifier = Modifier.weight(1f),
-                readOnly = readOnly,
-                singleLine = true,
-            )
-        }
-        if (!readOnly) {
-            OutlinedButton(onClick = onRemove) {
-                Text(stringResource(R.string.remove_item))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = item.quantity,
+                    onValueChange = onQuantityChange,
+                    label = { Text(stringResource(R.string.item_quantity)) },
+                    modifier = Modifier.weight(1f),
+                    readOnly = readOnly,
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = item.unitPrice,
+                    onValueChange = onUnitPriceChange,
+                    label = { Text(stringResource(R.string.item_unit_price)) },
+                    modifier = Modifier.weight(1f),
+                    readOnly = readOnly,
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = item.lineTotal,
+                    onValueChange = onLineTotalChange,
+                    label = { Text(stringResource(R.string.item_line_total)) },
+                    modifier = Modifier.weight(1f),
+                    readOnly = readOnly,
+                    singleLine = true,
+                )
+            }
+            if (!readOnly) {
+                TextButton(onClick = onRemove) {
+                    Text(stringResource(R.string.remove_item))
+                }
             }
         }
     }
+}
+
+private val purchaseDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+
+private fun LocalDate.toEpochMillis(): Long {
+    return atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+}
+
+private fun Long.toLocalDate(): LocalDate {
+    return Instant.ofEpochMilli(this).atZone(ZoneId.of("UTC")).toLocalDate()
+}
+
+private fun String.toLocalDateOrNull(): LocalDate? {
+    return runCatching { LocalDate.parse(this, purchaseDateFormatter) }.getOrNull()
 }
