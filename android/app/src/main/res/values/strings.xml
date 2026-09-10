@@ -20,7 +20,6 @@
     <string name="capture_button">Ta bilde</string>
     <string name="pick_from_gallery">Velg fra galleri</string>
     <string name="processing_title">Leser kvitteringen</string>
-    <string name="processing_status">Status: %1$s</string>
     <string name="review_title">Gjennomgå kvittering</string>
     <string name="unknown_store">Ukjent butikk</string>
     <string name="receipt_total">Total: %1$s kr</string>
@@ -47,7 +46,6 @@
     <string name="all_stores">Alle butikker</string>
     <string name="product_search_title">Produktsøk</string>
     <string name="search_products">Søk etter produkt</string>
-    <string name="search_button">Søk</string>
     <string name="cheapest_for_me_title">Billigst for meg</string>
     <string name="cheapest_price">Billigst hos %1$s: %2$s kr</string>
     <string name="all_observations">Alle observasjoner</string>

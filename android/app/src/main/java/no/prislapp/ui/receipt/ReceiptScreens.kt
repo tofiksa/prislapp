@@ -24,7 +24,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -172,8 +171,10 @@ fun ReceiptReviewScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.review_title)) },
-                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
+            PrislappTopBar(
+                title = stringResource(R.string.review_title),
+                onBack = onBack,
+            )
         },
     ) { padding ->
         when {
@@ -201,7 +202,15 @@ fun ReceiptReviewScreen(
                         item { OutlinedButton(onClick = viewModel::retryProcessing) { Text(stringResource(R.string.retry)) } }
                     }
                     if (uiState.status == "PROCESSING" || uiState.status == "UPLOADED") {
-                        item { Text(stringResource(R.string.processing_status, uiState.status)) }
+                        item {
+                            Text(
+                                if (uiState.status == "PROCESSING") {
+                                    stringResource(R.string.processing_body_ocr)
+                                } else {
+                                    stringResource(R.string.processing_body_upload)
+                                },
+                            )
+                        }
                     }
                     item {
                         Box {

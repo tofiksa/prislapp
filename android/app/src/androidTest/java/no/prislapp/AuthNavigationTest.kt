@@ -27,7 +27,9 @@ class AuthNavigationTest {
         compose.onNodeWithText("E-post").performTextInput(email)
         compose.onNodeWithText("Passord").performTextInput("TestPass123!")
         compose.onAllNodesWithText("Logg inn").filterToOne(hasClickAction()).performClick()
-        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Konto").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithContentDescription("Ta bilde av kvittering").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Historikk").performClick()
         compose.onNodeWithText("Søk").performClick()
         compose.onNode(hasSetTextAction()).performTextInput("melk")

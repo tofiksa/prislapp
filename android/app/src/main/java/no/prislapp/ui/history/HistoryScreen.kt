@@ -15,7 +15,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -114,7 +113,7 @@ fun HistoryScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OutlinedButton(
+                    TextButton(
                         onClick = { activeDatePicker = ActiveDatePicker.FROM },
                         modifier = Modifier.weight(1f),
                     ) {
@@ -122,7 +121,7 @@ fun HistoryScreen(
                             uiState.fromDateLabel ?: stringResource(R.string.from_date),
                         )
                     }
-                    OutlinedButton(
+                    TextButton(
                         onClick = { activeDatePicker = ActiveDatePicker.TO },
                         modifier = Modifier.weight(1f),
                     ) {
@@ -134,7 +133,7 @@ fun HistoryScreen(
             }
             if (uiState.hasDateFilter) {
                 item {
-                    OutlinedButton(onClick = viewModel::clearDateFilter) {
+                    TextButton(onClick = viewModel::clearDateFilter) {
                         Text(stringResource(R.string.clear_date_filter))
                     }
                 }
@@ -197,10 +196,10 @@ fun HistoryScreen(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                item { OutlinedButton(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } }
+                item { TextButton(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } }
             }
             if (uiState.hasMore) {
-                item { OutlinedButton(onClick = viewModel::loadMore, enabled = !uiState.isLoading) {
+                item { TextButton(onClick = viewModel::loadMore, enabled = !uiState.isLoading) {
                     Text(stringResource(R.string.load_more))
                 } }
             }
