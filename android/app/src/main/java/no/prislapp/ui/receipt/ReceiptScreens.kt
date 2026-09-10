@@ -36,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -212,10 +214,12 @@ fun ReceiptReviewScreen(
                                 singleLine = true,
                             )
                             if (!uiState.isReadOnly) {
+                                val purchaseDateLabel = stringResource(R.string.purchase_date)
                                 Box(
                                     modifier = Modifier
                                         .matchParentSize()
-                                        .clickable { showDatePicker = true },
+                                        .clickable { showDatePicker = true }
+                                        .semantics { contentDescription = purchaseDateLabel },
                                 )
                             }
                         }
@@ -302,8 +306,14 @@ fun ReceiptReviewScreen(
                         }
                     }
                     item {
-                        OutlinedButton(onClick = { confirmDelete = true }, enabled = !uiState.isSaving) {
-                            Text(stringResource(R.string.delete_receipt))
+                        TextButton(
+                            onClick = { confirmDelete = true },
+                            enabled = !uiState.isSaving,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.delete_receipt),
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                     }
                     uiState.error?.let { error ->
