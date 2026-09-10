@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.prislapp.R
 import no.prislapp.data.local.entity.PendingReceiptEntity
+import no.prislapp.ui.components.PrislappTopBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,10 +56,24 @@ fun ReceiptProcessingScreen(
         }
     }
 
+    val bodyText = when {
+        uiState.status == PendingReceiptEntity.STATUS_PENDING ||
+            uiState.status == PendingReceiptEntity.STATUS_UPLOADING ||
+            uiState.status == PendingReceiptEntity.STATUS_UPLOADED ->
+            stringResource(R.string.processing_body_upload)
+        uiState.status == PendingReceiptEntity.STATUS_PROCESSING ->
+            stringResource(R.string.processing_body_ocr)
+        uiState.status == PendingReceiptEntity.STATUS_FAILED || uiState.error != null ->
+            stringResource(R.string.processing_body_failed)
+        else -> receiptStatusLabel(uiState.status)
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.processing_title)) },
-                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
+            PrislappTopBar(
+                title = stringResource(R.string.processing_title),
+                onBack = onBack,
+            )
         },
     ) { padding ->
         Column(
@@ -71,16 +86,9 @@ fun ReceiptProcessingScreen(
                 CircularProgressIndicator()
             }
             Text(
-                text = stringResource(R.string.processing_status, uiState.status),
+                text = bodyText,
                 modifier = Modifier.padding(top = 16.dp),
             )
-            uiState.error?.let { error ->
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
             if (uiState.status == PendingReceiptEntity.STATUS_FAILED || uiState.error != null) {
                 OutlinedButton(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) }
             }
