@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import no.prislapp.data.remote.dto.ProductSummaryResponse
 import no.prislapp.data.repository.ProductRepository
@@ -32,29 +33,25 @@ class ProductSearchViewModel @Inject constructor(
 
     fun updateQuery(value: String) {
         searchJob?.cancel()
-        _uiState.update { it.copy(query = value, results = emptyList(), isSearching = false, hasSearched = false) }
-    }
-
-    fun search() {
-        val query = _uiState.value.query.trim()
-        if (query.isEmpty()) return
-
-        searchJob?.cancel()
+        val trimmed = value
+        _uiState.update {
+            it.copy(query = trimmed, error = null)
+        }
+        if (trimmed.trim().length < 2) {
+            _uiState.update { it.copy(results = emptyList(), isSearching = false, hasSearched = false) }
+            return
+        }
         searchJob = viewModelScope.launch {
-            _uiState.update { it.copy(isSearching = true, error = null) }
+            delay(300)
+            _uiState.update { it.copy(isSearching = true) }
             try {
-                val response = productRepository.searchProducts(query)
+                val response = productRepository.searchProducts(trimmed.trim())
                 _uiState.update {
                     it.copy(isSearching = false, results = response.items, hasSearched = true)
                 }
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isSearching = false,
-                        error = e.message ?: "Søk feilet",
-                    )
-                }
+                _uiState.update { it.copy(isSearching = false, error = e.message ?: "Søk feilet") }
             }
         }
     }

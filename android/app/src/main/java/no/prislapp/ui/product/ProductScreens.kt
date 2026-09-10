@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.prislapp.R
 import no.prislapp.ui.components.PrislappTopBar
+import no.prislapp.ui.components.ReceiptRow
 
 @Composable
 fun ProductSearchScreen(
@@ -55,13 +55,6 @@ fun ProductSearchScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            Button(
-                onClick = viewModel::search,
-                enabled = !uiState.isSearching,
-                modifier = Modifier.padding(top = 12.dp),
-            ) {
-                Text(stringResource(R.string.search_button))
-            }
 
             if (uiState.isSearching) {
                 CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
@@ -72,14 +65,12 @@ fun ProductSearchScreen(
 
             LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
                 items(uiState.results, key = { it.id }) { product ->
-                    OutlinedButton(
+                    ReceiptRow(
+                        title = product.canonical_name,
+                        subtitle = "",
+                        statusLabel = null,
                         onClick = { onOpenProduct(product.id) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                    ) {
-                        Text(product.canonical_name)
-                    }
+                    )
                 }
             }
 

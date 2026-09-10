@@ -30,8 +30,7 @@ class AuthNavigationTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Konto").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Historikk").performClick()
         compose.onNodeWithText("Søk").performClick()
-        compose.onNodeWithText("Søk etter produkt").performTextInput("melk")
-        compose.onNode(hasText("Søk") and hasClickAction() and isNotSelected()).performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("melk")
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("Ingen produkter funnet i dine bekreftede kvitteringer").fetchSemanticsNodes().isNotEmpty()
         }
