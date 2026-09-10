@@ -106,7 +106,7 @@ async def test_upload_requires_auth(client: AsyncClient):
         "/receipts",
         files={"file": ("receipt.jpg", b"fake-jpeg-content", "image/jpeg")},
     )
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

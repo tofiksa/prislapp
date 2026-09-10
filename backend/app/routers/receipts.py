@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_current_user_or_401
 from app.models.user import User
 from app.models.receipt import Receipt, ReceiptStatus
 from app.schemas.receipt import (
@@ -165,7 +165,7 @@ async def get_receipt(
 @router.get("/{receipt_id}/image")
 async def get_receipt_image(
     receipt_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_401),
     db: AsyncSession = Depends(get_db),
 ):
     receipt = await ReceiptService(db).get_receipt_for_user(receipt_id, current_user.id)

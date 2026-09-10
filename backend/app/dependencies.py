@@ -8,18 +8,14 @@ from app.security.jwt import decode_token
 from app.services.auth_service import AuthService
 from app.services.storage_service import StorageService
 
-security = HTTPBearer(auto_error=False)
+security = HTTPBearer()
+_optional_security = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: AsyncSession = Depends(get_db),
+async def _user_from_credentials(
+    credentials: HTTPAuthorizationCredentials,
+    db: AsyncSession,
 ):
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
     try:
         payload = decode_token(credentials.credentials)
     except ValueError as exc:
@@ -41,6 +37,25 @@ async def get_current_user(
             detail="User not found",
         )
     return user
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+):
+    return await _user_from_credentials(credentials, db)
+
+
+async def get_current_user_or_401(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_security),
+    db: AsyncSession = Depends(get_db),
+):
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    return await _user_from_credentials(credentials, db)
 
 
 async def check_postgres(db: AsyncSession) -> bool:
