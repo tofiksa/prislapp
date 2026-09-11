@@ -1,8 +1,11 @@
 package no.prislapp.data.repository
 
 import android.content.Context
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import io.mockk.*
+import no.prislapp.data.remote.dto.ReceiptUploadResponse
 import kotlinx.coroutines.test.runTest
 import no.prislapp.data.local.TokenStore
 import no.prislapp.data.local.dao.PendingReceiptDao
@@ -150,6 +153,86 @@ class ReceiptRepositoryTest {
         val pending = repository.getPendingForUpload()
         assertEquals(listOf(1L), pending.map { it.id })
         assertFalse(statuses.captured.contains("failed_permanent"))
+    }
+
+    @Test
+    fun retryReceiptWhileProcessingDoesNotCallApiRetry() = runTest {
+        val dao = mockk<PendingReceiptDao>(relaxed = true)
+        val api = mockk<PrislappApi>()
+        val workManager = mockk<WorkManager>(relaxed = true)
+        val store = mockk<TokenStore>()
+        every { store.getUserId() } returns "a"
+        coEvery { dao.getById(1) } returns PendingReceiptEntity(
+            id = 1,
+            imagePath = "/p.jpg",
+            userId = "a",
+            status = "processing",
+            serverReceiptId = "srv-1",
+        )
+        coEvery { api.retryReceipt("srv-1") } returns ReceiptUploadResponse("srv-1", "PROCESSING")
+        val repository = ReceiptRepository(mockk(), api, dao, workManager, store)
+        repository.retryReceipt(1)
+        coVerify(exactly = 0) { api.retryReceipt(any()) }
+        verify(exactly = 0) {
+            workManager.enqueueUniqueWork(
+                "receipt_upload",
+                any<ExistingWorkPolicy>(),
+                any<OneTimeWorkRequest>(),
+            )
+        }
+    }
+
+    @Test
+    fun retryReceiptForNeedsActionCallsApiRetry() = runTest {
+        val dao = mockk<PendingReceiptDao>(relaxed = true)
+        val api = mockk<PrislappApi>()
+        val workManager = mockk<WorkManager>(relaxed = true)
+        val store = mockk<TokenStore>()
+        every { store.getUserId() } returns "a"
+        coEvery { dao.getById(1) } returns PendingReceiptEntity(
+            id = 1,
+            imagePath = "/n.jpg",
+            userId = "a",
+            status = "needs_action",
+            serverReceiptId = "srv-1",
+        )
+        coEvery { api.retryReceipt("srv-1") } returns ReceiptUploadResponse("srv-1", "PROCESSING")
+        val repository = ReceiptRepository(mockk(), api, dao, workManager, store)
+        repository.retryReceipt(1)
+        coVerify(exactly = 1) { api.retryReceipt("srv-1") }
+        verify(exactly = 0) {
+            workManager.enqueueUniqueWork(
+                "receipt_upload",
+                any<ExistingWorkPolicy>(),
+                any<OneTimeWorkRequest>(),
+            )
+        }
+    }
+
+    @Test
+    fun retryReceiptForQueuedOfflineEnqueuesUploadNotOcr() = runTest {
+        val dao = mockk<PendingReceiptDao>(relaxed = true)
+        val api = mockk<PrislappApi>()
+        val workManager = mockk<WorkManager>(relaxed = true)
+        val store = mockk<TokenStore>()
+        every { store.getUserId() } returns "a"
+        coEvery { dao.getById(1) } returns PendingReceiptEntity(
+            id = 1,
+            imagePath = "/q.jpg",
+            userId = "a",
+            status = "queued_offline",
+            serverReceiptId = null,
+        )
+        val repository = ReceiptRepository(mockk(), api, dao, workManager, store)
+        repository.retryReceipt(1)
+        coVerify(exactly = 0) { api.retryReceipt(any()) }
+        verify {
+            workManager.enqueueUniqueWork(
+                "receipt_upload",
+                any<ExistingWorkPolicy>(),
+                any<OneTimeWorkRequest>(),
+            )
+        }
     }
 
     @Test

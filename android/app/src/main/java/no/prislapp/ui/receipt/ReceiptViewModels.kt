@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import no.prislapp.data.local.entity.PendingReceiptEntity
+import no.prislapp.data.local.entity.ReceiptQueueStatus
 import no.prislapp.data.remote.dto.ReceiptConfirmItemRequest
 import no.prislapp.data.remote.dto.ReceiptConfirmRequest
 import no.prislapp.data.remote.dto.ReceiptDetailResponse
@@ -127,7 +128,12 @@ class ReceiptProcessingViewModel @Inject constructor(
     fun retry() {
         viewModelScope.launch {
             try {
-                receiptRepository.retryReceipt(localId)
+                val pending = receiptRepository.getPendingReceipt(localId)
+                if (pending != null &&
+                    ReceiptQueueStatus.canRetry(pending.status, pending.serverReceiptId)
+                ) {
+                    receiptRepository.retryReceipt(localId)
+                }
                 _uiState.update { it.copy(isPolling = true, error = null) }
                 startPolling()
             } catch (e: CancellationException) { throw e

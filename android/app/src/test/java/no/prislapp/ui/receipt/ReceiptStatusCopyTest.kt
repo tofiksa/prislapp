@@ -22,6 +22,15 @@ class ReceiptStatusCopyTest {
     }
 
     @Test
+    fun processingScreenRetryOnlyForQueuedOfflineNeedsActionOrPollError() {
+        assertEquals(true, showProcessingScreenRetry("queued_offline", null, null))
+        assertEquals(true, showProcessingScreenRetry("needs_action", "srv-1", null))
+        assertEquals(true, showProcessingScreenRetry("processing", "srv-1", "poll failed"))
+        assertEquals(false, showProcessingScreenRetry("processing", "srv-1", null))
+        assertEquals(false, showProcessingScreenRetry("failed_permanent", null, "poll failed"))
+    }
+
+    @Test
     fun unknownStatusUsesFallbackResource() {
         assertEquals(R.string.status_unknown, receiptStatusLabelRes("SOMETHING_ELSE"))
     }

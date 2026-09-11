@@ -104,10 +104,7 @@ fun ReceiptProcessingScreen(
                 text = bodyText,
                 modifier = Modifier.padding(top = 16.dp),
             )
-            if (canonical == no.prislapp.data.local.entity.ReceiptQueueStatus.NEEDS_ACTION ||
-                (canonical == no.prislapp.data.local.entity.ReceiptQueueStatus.QUEUED_OFFLINE) ||
-                uiState.error != null
-            ) {
+            if (showProcessingScreenRetry(canonical, uiState.serverReceiptId, uiState.error)) {
                 OutlinedButton(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) }
             }
         }

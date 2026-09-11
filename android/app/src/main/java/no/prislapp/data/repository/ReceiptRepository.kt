@@ -192,17 +192,21 @@ class ReceiptRepository @Inject constructor(
     suspend fun retryReceipt(localId: Long) {
         val entity = getPendingReceipt(localId) ?: error("Kvittering ikke funnet")
         uploadQueuePaused = false
-        if (entity.serverReceiptId != null) {
-            val response = api.retryReceipt(entity.serverReceiptId)
-            pendingReceiptDao.update(
-                entity.copy(status = ReceiptQueueStatus.fromServer(response.status, response.id)),
-            )
-            ReceiptPollWorker.enqueue(workManager, response.id, entity.id)
-        } else {
-            pendingReceiptDao.update(
-                entity.copy(status = PendingReceiptEntity.STATUS_QUEUED_OFFLINE, lastErrorCode = null),
-            )
-            ReceiptUploadWorker.enqueue(workManager)
+        val canonical = ReceiptQueueStatus.canonical(entity.status, entity.serverReceiptId)
+        when {
+            canonical == ReceiptQueueStatus.NEEDS_ACTION && entity.serverReceiptId != null -> {
+                val response = api.retryReceipt(entity.serverReceiptId)
+                pendingReceiptDao.update(
+                    entity.copy(status = ReceiptQueueStatus.fromServer(response.status, response.id)),
+                )
+                ReceiptPollWorker.enqueue(workManager, response.id, entity.id)
+            }
+            canonical == ReceiptQueueStatus.QUEUED_OFFLINE || entity.serverReceiptId == null -> {
+                pendingReceiptDao.update(
+                    entity.copy(status = PendingReceiptEntity.STATUS_QUEUED_OFFLINE, lastErrorCode = null),
+                )
+                ReceiptUploadWorker.enqueue(workManager)
+            }
         }
     }
 
