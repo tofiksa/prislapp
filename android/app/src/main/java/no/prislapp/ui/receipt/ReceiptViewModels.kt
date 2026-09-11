@@ -67,12 +67,27 @@ class ReceiptProcessingViewModel @Inject constructor(
 
                 _uiState.update {
                     it.copy(
-                        status = pending.status,
+                        status = no.prislapp.data.local.entity.ReceiptQueueStatus.canonical(
+                            pending.status,
+                            pending.serverReceiptId,
+                        ),
                         serverReceiptId = pending.serverReceiptId,
                     )
                 }
 
-                if (pending.status == PendingReceiptEntity.STATUS_CONFIRMED) {
+                val localStatus = no.prislapp.data.local.entity.ReceiptQueueStatus.canonical(
+                    pending.status,
+                    pending.serverReceiptId,
+                )
+                if (pending.status == PendingReceiptEntity.STATUS_CONFIRMED ||
+                    localStatus == no.prislapp.data.local.entity.ReceiptQueueStatus.CONFIRMED
+                ) {
+                    _uiState.update { it.copy(isPolling = false) }
+                    break
+                }
+                if (localStatus == no.prislapp.data.local.entity.ReceiptQueueStatus.FAILED_PERMANENT ||
+                    localStatus == no.prislapp.data.local.entity.ReceiptQueueStatus.NEEDS_ACTION
+                ) {
                     _uiState.update { it.copy(isPolling = false) }
                     break
                 }
@@ -82,11 +97,16 @@ class ReceiptProcessingViewModel @Inject constructor(
                     try {
                         val detail = receiptRepository.getReceiptDetail(serverReceiptId)
                         receiptRepository.syncLocalStatus(serverReceiptId, detail.status)
+                        val mapped = no.prislapp.data.local.entity.ReceiptQueueStatus.fromServer(
+                            detail.status,
+                            serverReceiptId,
+                        )
                         _uiState.update {
-                            it.copy(status = detail.status, error = null)
+                            it.copy(status = mapped, error = null)
                         }
-                        if (detail.status == PendingReceiptEntity.STATUS_READY_FOR_REVIEW ||
-                            detail.status == PendingReceiptEntity.STATUS_FAILED
+                        if (mapped == no.prislapp.data.local.entity.ReceiptQueueStatus.READY_FOR_REVIEW ||
+                            mapped == no.prislapp.data.local.entity.ReceiptQueueStatus.NEEDS_ACTION ||
+                            mapped == no.prislapp.data.local.entity.ReceiptQueueStatus.FAILED_PERMANENT
                         ) {
                             _uiState.update { it.copy(isPolling = false) }
                             break

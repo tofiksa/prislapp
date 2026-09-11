@@ -26,6 +26,7 @@ class QueueDatabaseTest {
                 no.prislapp.di.DatabaseModule.MIGRATION_2_3,
                 no.prislapp.di.DatabaseModule.MIGRATION_3_4,
                 no.prislapp.di.DatabaseModule.MIGRATION_4_5,
+                no.prislapp.di.DatabaseModule.MIGRATION_5_6,
             ).build()
         try {
             assertTrue(db.pendingReceiptDao().observeAll("new-user").first().isEmpty())
@@ -46,6 +47,7 @@ class QueueDatabaseTest {
                 no.prislapp.di.DatabaseModule.MIGRATION_2_3,
                 no.prislapp.di.DatabaseModule.MIGRATION_3_4,
                 no.prislapp.di.DatabaseModule.MIGRATION_4_5,
+                no.prislapp.di.DatabaseModule.MIGRATION_5_6,
             ).build()
         try {
             assertEquals("/keep.jpg", db.pendingReceiptDao().getById(1)?.imagePath)
@@ -65,7 +67,7 @@ class QueueDatabaseTest {
             db.close()
             db = Room.databaseBuilder(context, PrislappDatabase::class.java, name).build()
             assertEquals(listOf(first.captureId), db.pendingReceiptDao().observeAll("a").first().map { it.captureId })
-            assertEquals(1, db.pendingReceiptDao().getByStatuses(listOf("PENDING"), "b").size)
+            assertEquals(1, db.pendingReceiptDao().getByStatuses(listOf("queued_offline"), "b").size)
             assertTrue(db.pendingReceiptDao().observeAll("c").first().isEmpty())
         } finally { db.close(); context.deleteDatabase(name) }
     }

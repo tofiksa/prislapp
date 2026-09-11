@@ -8,4 +8,5 @@ data class HomeUiState(
     val pendingReceipts: List<PendingReceiptEntity> = emptyList(),
     val serverReceipts: List<ReceiptSummaryResponse> = emptyList(),
     val error: String? = null,
+    val showUnuploadedRetentionBanner: Boolean = false,
 )

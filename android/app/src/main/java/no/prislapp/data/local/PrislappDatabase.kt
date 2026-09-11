@@ -30,7 +30,7 @@ import no.prislapp.data.local.entity.SyncStateEntity
         CachedUserProductEntity::class,
         PriceSummaryCacheEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class PrislappDatabase : RoomDatabase() {

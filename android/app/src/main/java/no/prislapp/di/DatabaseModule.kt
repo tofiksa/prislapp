@@ -165,6 +165,26 @@ object DatabaseModule {
         }
     }
 
+    val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE pending_receipts ADD COLUMN lastErrorCode TEXT")
+            db.execSQL("UPDATE pending_receipts SET status = 'queued_offline' WHERE status = 'PENDING'")
+            db.execSQL("UPDATE pending_receipts SET status = 'uploading' WHERE status = 'UPLOADING'")
+            db.execSQL(
+                "UPDATE pending_receipts SET status = 'processing' WHERE status IN ('UPLOADED', 'PROCESSING')",
+            )
+            db.execSQL(
+                "UPDATE pending_receipts SET status = 'ready_for_review' WHERE status = 'READY_FOR_REVIEW'",
+            )
+            db.execSQL(
+                "UPDATE pending_receipts SET status = 'failed_permanent' WHERE status = 'FAILED' AND serverReceiptId IS NULL",
+            )
+            db.execSQL(
+                "UPDATE pending_receipts SET status = 'needs_action' WHERE status = 'FAILED' AND serverReceiptId IS NOT NULL",
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): PrislappDatabase {
@@ -172,7 +192,13 @@ object DatabaseModule {
             context,
             PrislappDatabase::class.java,
             "prislapp.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+        ).addMigrations(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
+        ).build()
     }
 
     @Provides

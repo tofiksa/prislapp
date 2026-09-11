@@ -67,15 +67,19 @@ fun ReceiptProcessingScreen(
         }
     }
 
-    val bodyText = when {
-        uiState.status == PendingReceiptEntity.STATUS_PENDING ||
-            uiState.status == PendingReceiptEntity.STATUS_UPLOADING ||
-            uiState.status == PendingReceiptEntity.STATUS_UPLOADED ->
-            stringResource(R.string.processing_body_upload)
-        uiState.status == PendingReceiptEntity.STATUS_PROCESSING ->
+    val canonical = no.prislapp.data.local.entity.ReceiptQueueStatus.canonical(
+        uiState.status,
+        uiState.serverReceiptId,
+    )
+    val bodyText = when (canonical) {
+        no.prislapp.data.local.entity.ReceiptQueueStatus.QUEUED_OFFLINE,
+        no.prislapp.data.local.entity.ReceiptQueueStatus.UPLOADING,
+        -> stringResource(R.string.processing_body_upload)
+        no.prislapp.data.local.entity.ReceiptQueueStatus.PROCESSING ->
             stringResource(R.string.processing_body_ocr)
-        uiState.status == PendingReceiptEntity.STATUS_FAILED || uiState.error != null ->
-            stringResource(R.string.processing_body_failed)
+        no.prislapp.data.local.entity.ReceiptQueueStatus.NEEDS_ACTION,
+        no.prislapp.data.local.entity.ReceiptQueueStatus.FAILED_PERMANENT,
+        -> stringResource(R.string.processing_body_failed)
         else -> receiptStatusLabel(uiState.status)
     }
 
@@ -100,7 +104,10 @@ fun ReceiptProcessingScreen(
                 text = bodyText,
                 modifier = Modifier.padding(top = 16.dp),
             )
-            if (uiState.status == PendingReceiptEntity.STATUS_FAILED || uiState.error != null) {
+            if (canonical == no.prislapp.data.local.entity.ReceiptQueueStatus.NEEDS_ACTION ||
+                (canonical == no.prislapp.data.local.entity.ReceiptQueueStatus.QUEUED_OFFLINE) ||
+                uiState.error != null
+            ) {
                 OutlinedButton(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) }
             }
         }

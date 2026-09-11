@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -14,20 +15,29 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil.compose.SubcomposeAsyncImage
+import java.io.File
 import java.math.BigDecimal
+import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val displayDateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+private val captureTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
 private val osloZone = ZoneId.of("Europe/Oslo")
 
 fun formatReceiptSubtitle(purchaseDateIso: String?, total: BigDecimal?): String {
     val dateText = purchaseDateIso?.let(::formatPurchaseDate)
     val totalText = total?.let { "${it.toPlainString().replace('.', ',')} kr" }
     return listOfNotNull(dateText, totalText).joinToString(" · ")
+}
+
+fun formatCaptureTime(createdAtMillis: Long, zone: ZoneId = osloZone): String {
+    return Instant.ofEpochMilli(createdAtMillis).atZone(zone).format(captureTimeFormatter)
 }
 
 private fun formatPurchaseDate(purchaseDateIso: String): String? {
@@ -48,8 +58,11 @@ fun ReceiptRow(
     statusLabel: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    thumbnailPath: String? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
 ) {
     Column(modifier = modifier) {
         Row(
@@ -59,6 +72,17 @@ fun ReceiptRow(
                 .padding(PaddingValues(vertical = 12.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val thumbnailFile = thumbnailPath?.let(::File)?.takeIf { it.exists() }
+            if (thumbnailFile != null) {
+                SubcomposeAsyncImage(
+                    model = thumbnailFile,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .padding(end = 12.dp)
+                        .size(48.dp),
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
@@ -87,6 +111,16 @@ fun ReceiptRow(
                     .height(48.dp),
             ) {
                 Text(actionLabel)
+            }
+        }
+        if (secondaryActionLabel != null && onSecondaryAction != null) {
+            TextButton(
+                onClick = onSecondaryAction,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+            ) {
+                Text(secondaryActionLabel)
             }
         }
         HorizontalDivider()

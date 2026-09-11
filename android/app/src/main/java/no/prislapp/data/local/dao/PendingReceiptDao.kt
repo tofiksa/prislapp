@@ -36,6 +36,6 @@ interface PendingReceiptDao {
     @Query("DELETE FROM pending_receipts WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    @Query("SELECT * FROM pending_receipts WHERE createdAt < :before")
+    @Query("SELECT * FROM pending_receipts WHERE createdAt < :before AND serverReceiptId IS NOT NULL")
     suspend fun getExpired(before: Long): List<PendingReceiptEntity>
 }

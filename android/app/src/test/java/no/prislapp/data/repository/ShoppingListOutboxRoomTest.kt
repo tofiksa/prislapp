@@ -98,11 +98,14 @@ class ShoppingListOutboxRoomTest {
             .addMigrations(
                 no.prislapp.di.DatabaseModule.MIGRATION_3_4,
                 no.prislapp.di.DatabaseModule.MIGRATION_4_5,
+                no.prislapp.di.DatabaseModule.MIGRATION_5_6,
             )
             .allowMainThreadQueries()
             .build()
         try {
             assertEquals("/keep.jpg", db.pendingReceiptDao().getById(1)?.imagePath)
+            assertEquals("queued_offline", db.pendingReceiptDao().getById(1)?.status)
+            assertEquals(null, db.pendingReceiptDao().getById(1)?.lastErrorCode)
             assertEquals("Tur", db.shoppingListDao().get("l1", "a")?.name)
             val cached = db.cachedUserProductDao().get("p1", "a")
             assertEquals("Melk", cached?.displayName)

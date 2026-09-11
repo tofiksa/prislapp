@@ -41,13 +41,18 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.prislapp.R
-import no.prislapp.data.local.entity.PendingReceiptEntity
+import androidx.compose.material3.AlertDialog
+import no.prislapp.data.local.entity.canRetry
+import no.prislapp.data.local.entity.canonicalStatus
+import no.prislapp.data.local.entity.ReceiptQueueStatus
 import no.prislapp.ui.components.EmptyState
 import no.prislapp.ui.components.PrislappTopBar
 import no.prislapp.ui.components.ReceiptRow
+import no.prislapp.ui.components.formatCaptureTime
 import no.prislapp.ui.components.formatReceiptSubtitle
 import no.prislapp.ui.history.HistoryViewModel
 import no.prislapp.ui.receipt.receiptStatusLabel
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -72,11 +77,39 @@ fun ReceiptsScreen(
     val historyState by historyViewModel.uiState.collectAsStateWithLifecycle()
     var accountMenuExpanded by remember { mutableStateOf(false) }
     var activeDatePicker by remember { mutableStateOf<ActiveDatePicker?>(null) }
+    var pendingRemoveId by remember { mutableStateOf<Long?>(null) }
 
     LifecycleResumeEffect(Unit) {
         homeViewModel.refreshServerReceipts()
         historyViewModel.reload()
         onPauseOrDispose { }
+    }
+
+    pendingRemoveId?.let { localId ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoveId = null },
+            title = { Text(stringResource(R.string.remove_local_receipt_title)) },
+            text = { Text(stringResource(R.string.remove_local_receipt_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        homeViewModel.removeLocalReceipt(localId)
+                        pendingRemoveId = null
+                    },
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text(stringResource(R.string.remove_local_receipt))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingRemoveId = null },
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 
     val openPicker = activeDatePicker
@@ -156,6 +189,15 @@ fun ReceiptsScreen(
             contentPadding = PaddingValues(bottom = 88.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (homeState.showUnuploadedRetentionBanner) {
+                item {
+                    Text(
+                        text = stringResource(R.string.unuploaded_retention_banner),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
             if (homeState.pendingReceipts.isNotEmpty()) {
                 item {
                     Text(
@@ -164,19 +206,34 @@ fun ReceiptsScreen(
                     )
                 }
                 items(homeState.pendingReceipts, key = { "pending-${it.id}" }) { pending ->
+                    val thumbnail = pending.imagePath.takeIf { File(it).exists() }
+                    val status = pending.canonicalStatus()
                     ReceiptRow(
                         title = stringResource(R.string.queued_receipt),
-                        subtitle = "",
+                        subtitle = formatCaptureTime(pending.createdAt),
                         statusLabel = receiptStatusLabel(pending.status),
+                        thumbnailPath = thumbnail,
                         onClick = {
                             if (pending.serverReceiptId != null &&
-                                pending.status == PendingReceiptEntity.STATUS_READY_FOR_REVIEW
+                                status == ReceiptQueueStatus.READY_FOR_REVIEW
                             ) {
                                 onOpenReceipt(pending.serverReceiptId)
                             } else {
                                 onOpenPending(pending.id)
                             }
                         },
+                        actionLabel = if (pending.canRetry()) {
+                            stringResource(R.string.retry)
+                        } else {
+                            null
+                        },
+                        onAction = if (pending.canRetry()) {
+                            { homeViewModel.retryQueueItem(pending.id) }
+                        } else {
+                            null
+                        },
+                        secondaryActionLabel = stringResource(R.string.remove_local_receipt),
+                        onSecondaryAction = { pendingRemoveId = pending.id },
                     )
                 }
             }
