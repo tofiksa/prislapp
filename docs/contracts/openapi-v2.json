@@ -861,15 +861,51 @@
       },
       "ShoppingListPriceSummary": {
         "type": "object",
-        "required": ["list_id", "list_version", "price_data_version", "calculated_at", "policy_version", "lines"],
+        "required": ["list_id", "list_version", "content_revision", "price_data_version", "calculated_at", "policy_version", "lines"],
         "properties": {
           "list_id": { "type": "string", "format": "uuid" },
-          "list_version": { "type": "integer" },
+          "list_version": { "type": "integer", "description": "Listens egne felter (S06-A)." },
+          "content_revision": { "type": "integer", "description": "Endres av enhver endring på listen eller linjene (S06-A). Cache og ETag nøkles på denne, ikke bare list_version." },
           "price_data_version": { "type": "integer" },
           "calculated_at": { "type": "string", "format": "date-time" },
           "policy_version": { "type": "string" },
           "include_conditional": { "type": "boolean" },
-          "lines": { "type": "array", "items": { "type": "object" } }
+          "lines": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingListPriceSummaryLine" } }
+        }
+      },
+      "ShoppingListPriceSummaryLine": {
+        "type": "object",
+        "required": ["item_id", "quantity", "quantity_unit", "status", "eligible_store_count"],
+        "properties": {
+          "item_id": { "type": "string", "format": "uuid" },
+          "product_id": { "type": ["string", "null"], "format": "uuid" },
+          "free_text": { "type": ["string", "null"] },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "status": { "type": "string", "enum": ["historical_lowest", "no_comparable_price"] },
+          "reason": {
+            "type": ["string", "null"],
+            "enum": ["free_text_no_history", "never_observed", "no_qualified_observation", null],
+            "description": "Satt bare når status er no_comparable_price. Alltid en grunn, aldri null kroner."
+          },
+          "eligible_store_count": { "type": "integer", "description": "Butikker linjen kan sammenlignes over. 1 er et ærlig svar, ikke en sammenligning." },
+          "historical_lowest": {
+            "oneOf": [{ "$ref": "#/components/schemas/ShoppingListPriceSummaryLowest" }, { "type": "null" }]
+          }
+        }
+      },
+      "ShoppingListPriceSummaryLowest": {
+        "type": "object",
+        "required": ["amount", "store_id", "store_name", "identity_level", "purchase_date", "age_label", "price_basis", "disclaimer"],
+        "properties": {
+          "amount": { "$ref": "#/components/schemas/DecimalString" },
+          "store_id": { "type": "string", "format": "uuid" },
+          "store_name": { "type": "string" },
+          "identity_level": { "type": "string", "enum": ["branch", "chain_only", "unknown"] },
+          "purchase_date": { "type": "string", "format": "date" },
+          "age_label": { "type": "string" },
+          "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
+          "disclaimer": { "type": "string" }
         }
       },
       "SyncRequest": {

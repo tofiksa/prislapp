@@ -150,10 +150,28 @@ def test_version_conflict_error_shape():
 
 def test_shopping_list_price_summary_versions():
     fixture = _load_fixture("shopping-list-price-summary.json")
-    for key in ("list_version", "price_data_version", "calculated_at", "policy_version"):
+    for key in (
+        "list_version",
+        # S06-A delte versjonen i to. En cache som bare ser `list_version`
+        # overser at en linje er endret.
+        "content_revision",
+        "price_data_version",
+        "calculated_at",
+        "policy_version",
+    ):
         assert key in fixture
     assert len(fixture["lines"]) == 2
     assert all("status" in line for line in fixture["lines"])
+
+
+def test_a_price_summary_line_without_a_price_gives_a_reason_and_not_zero():
+    fixture = _load_fixture("shopping-list-price-summary.json")
+    unpriced = [line for line in fixture["lines"] if line["historical_lowest"] is None]
+    assert unpriced, "fixturen må vise en linje uten sammenlignbar pris"
+    for line in unpriced:
+        assert line["status"] == "no_comparable_price"
+        assert line["reason"]
+        assert "0.00" not in json.dumps(line)
 
 
 def test_openapi_documents_v2_and_auth_extensions():

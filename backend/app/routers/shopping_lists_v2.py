@@ -24,6 +24,10 @@ from app.schemas.shopping_list import (
     SyncRequest,
     SyncResponseBody,
 )
+from app.schemas.shopping_list_price_summary import ShoppingListPriceSummaryResponse
+from app.services.shopping_list_price_summary_service import (
+    ShoppingListPriceSummaryService,
+)
 from app.services.shopping_list_service import ShoppingListService
 
 router = APIRouter(prefix="/v2/shopping-lists", tags=["shopping-lists"])
@@ -61,6 +65,20 @@ async def get_shopping_list(
     db: AsyncSession = Depends(get_db),
 ):
     return await ShoppingListService(db).get_list(current_user.id, list_id)
+
+
+@router.get("/{list_id}/price-summary", response_model=ShoppingListPriceSummaryResponse)
+async def get_shopping_list_price_summary(
+    list_id: uuid.UUID,
+    include_conditional: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await ShoppingListPriceSummaryService(db).get_price_summary(
+        current_user.id,
+        list_id,
+        include_conditional=include_conditional,
+    )
 
 
 @router.patch("/{list_id}", response_model=ShoppingListResponse)

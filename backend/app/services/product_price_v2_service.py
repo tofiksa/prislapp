@@ -18,13 +18,11 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.money import display_nok
-from app.domain.pricing import DatePrecision, ExclusionReason
+from app.domain.pricing import ExclusionReason
 from app.domain.price_history import (
-    BRANCH_IDENTITY,
     PRICE_DISCLAIMER,
     Lowest,
     Observation,
-    RankingExclusion,
     Source,
     StoreLatest,
     age_label,
@@ -35,15 +33,7 @@ from app.domain.price_history import (
 )
 from app.errors import not_found
 from app.models.account_ledger import AccountLedger
-from app.models.receipt import Receipt, ReceiptStatus
-from app.models.receipt_revision import (
-    PriceObservationV2,
-    ReceiptRevision,
-    ReceiptRevisionLine,
-    RevisionStatus,
-)
 from app.models.user_product import UserProduct
-from app.models.user_store import UserStore
 from app.schemas.product_price_v2 import (
     AmountRangeResponse,
     HistoricalLowestResponse,
@@ -56,6 +46,7 @@ from app.schemas.product_price_v2 import (
 )
 from app.schemas.v2 import decimal_string
 from app.services.pagination import decode_cursor, encode_cursor, page_size
+from app.services.price_observations import PriceObservationLoader
 from app.services.private_catalog_service import PrivateCatalogService
 
 COMPARISON_CURRENCY = "NOK"
@@ -65,7 +56,6 @@ HISTORY_SCOPE = "product_prices:history"
 UNDATED_SORT_KEY = ""
 
 CONDITIONAL = ExclusionReason.CONDITIONAL.value
-UNKNOWN_DATE = ExclusionReason.UNKNOWN_DATE.value
 
 
 class ProductPriceV2Service:
@@ -143,140 +133,12 @@ class ProductPriceV2Service:
         product_id: uuid.UUID,
         include_conditional: bool,
     ) -> list[Observation]:
-        published = await self._published(user_id, product_id)
-        # Linje-ID-en er bare unik innenfor sin revisjon, så revisjonen må være
-        # med i nøkkelen. Ellers ville to kvitteringer med samme linje-ID blitt
-        # ett kjøp, og det ene kjøpet forsvunnet ut av historikken.
-        seen = {(row.source.revision_id, row.source.line_id) for row in published}
-        unpublished = await self._unpublished(user_id, product_id, include_conditional)
-        return published + [
-            row
-            for row in unpublished
-            if (row.source.revision_id, row.source.line_id) not in seen
-        ]
-
-    async def _published(
-        self,
-        user_id: uuid.UUID,
-        product_id: uuid.UUID,
-    ) -> list[Observation]:
-        """Gjeldende, kvalifiserte observasjoner fra siste bekreftede revisjon."""
-        result = await self.db.execute(
-            sa.select(PriceObservationV2, UserStore, ReceiptRevision.purchase_time)
-            .join(UserStore, UserStore.id == PriceObservationV2.user_store_id)
-            .join(ReceiptRevision, ReceiptRevision.id == PriceObservationV2.revision_id)
-            .where(
-                PriceObservationV2.user_id == user_id,
-                PriceObservationV2.user_product_id == product_id,
-                PriceObservationV2.is_current.is_(True),
-            ),
+        grouped = await PriceObservationLoader(self.db).observations(
+            user_id,
+            [product_id],
+            include_conditional,
         )
-        return [
-            Observation(
-                row_id=observation.id,
-                price=observation.price,
-                price_basis=observation.price_basis,
-                purchase_date=observation.purchase_date,
-                date_precision=observation.date_precision,
-                purchase_time=purchase_time,
-                store_id=store.id,
-                store_name=store.display_name,
-                store_identity=store.identity_level,
-                condition=observation.condition,
-                source=Source(
-                    receipt_id=observation.receipt_id,
-                    revision_id=observation.revision_id,
-                    revision=observation.revision,
-                    line_id=observation.line_id,
-                ),
-                reasons=self._ranking_reasons(
-                    (),
-                    observation.purchase_date,
-                    observation.date_precision,
-                    store.identity_level,
-                ),
-            )
-            for observation, store, purchase_time in result.all()
-        ]
-
-    async def _unpublished(
-        self,
-        user_id: uuid.UUID,
-        product_id: uuid.UUID,
-        include_conditional: bool,
-    ) -> list[Observation]:
-        """Linjer på gjeldende revisjon som ikke ble kvalifisert til pris."""
-        result = await self.db.execute(
-            sa.select(ReceiptRevisionLine, ReceiptRevision, UserStore)
-            .join(ReceiptRevision, ReceiptRevision.id == ReceiptRevisionLine.revision_id)
-            .join(Receipt, Receipt.id == ReceiptRevision.receipt_id)
-            .outerjoin(UserStore, UserStore.id == ReceiptRevision.user_store_id)
-            .where(
-                ReceiptRevision.user_id == user_id,
-                ReceiptRevisionLine.user_product_id == product_id,
-                ReceiptRevision.status == RevisionStatus.CONFIRMED.value,
-                Receipt.status == ReceiptStatus.CONFIRMED.value,
-                # Bare gjeldende revisjon; en rettet linje er ikke lenger et faktum.
-                Receipt.version == ReceiptRevision.revision,
-            ),
-        )
-        return [
-            Observation(
-                row_id=line.id,
-                price=line.comparison_price,
-                price_basis=line.price_basis,
-                purchase_date=revision.purchase_date,
-                date_precision=revision.date_precision,
-                purchase_time=revision.purchase_time,
-                store_id=store.id if store else None,
-                store_name=store.display_name if store else None,
-                store_identity=store.identity_level if store else None,
-                condition=line.condition,
-                source=Source(
-                    receipt_id=revision.receipt_id,
-                    revision_id=revision.id,
-                    revision=revision.revision,
-                    line_id=line.line_id,
-                ),
-                reasons=self._ranking_reasons(
-                    self._line_reasons(line, include_conditional),
-                    revision.purchase_date,
-                    revision.date_precision,
-                    store.identity_level if store else None,
-                ),
-            )
-            for line, revision, store in result.all()
-        ]
-
-    @staticmethod
-    def _line_reasons(
-        line: ReceiptRevisionLine,
-        include_conditional: bool,
-    ) -> tuple[str, ...]:
-        """Linjens egne grunner, med vilkårsfilteret anvendt.
-
-        `include_conditional` slår bare av `conditional`. Ukjent rabatt, enhet,
-        identitet eller vilkår er fortsatt ikke rangerbart, uansett filter.
-        """
-        reasons = tuple(line.exclusion_reasons or ())
-        if include_conditional and line.comparison_price is not None:
-            reasons = tuple(reason for reason in reasons if reason != CONDITIONAL)
-        return reasons
-
-    @staticmethod
-    def _ranking_reasons(
-        line_reasons: tuple[str, ...],
-        purchase_date,
-        date_precision: str,
-        store_identity: str | None,
-    ) -> tuple[str, ...]:
-        reasons = [reason for reason in line_reasons if reason != UNKNOWN_DATE]
-        if purchase_date is None or date_precision == DatePrecision.UNKNOWN.value:
-            reasons.append(UNKNOWN_DATE)
-        if store_identity != BRANCH_IDENTITY:
-            # Kjede uten filial og ukjent butikk er ikke sammenlignbare butikker.
-            reasons.append(RankingExclusion.STORE_NOT_BRANCH.value)
-        return tuple(reasons)
+        return grouped.get(product_id, [])
 
     @staticmethod
     def _reason_counts(excluded: list[Observation]) -> dict[str, int]:
