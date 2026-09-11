@@ -7,6 +7,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.errors import not_found
 from app.models.user import User
+from app.schemas.product_price_v2 import ProductPriceResponse
 from app.schemas.v2 import (
     UserProductListResponse,
     UserProductResponse,
@@ -14,6 +15,7 @@ from app.schemas.v2 import (
     UserStoreResponse,
 )
 from app.services.private_catalog_service import PrivateCatalogService
+from app.services.product_price_v2_service import ProductPriceV2Service
 
 router = APIRouter(prefix="/v2/me", tags=["me"])
 
@@ -56,6 +58,29 @@ async def get_my_product(
         # Fremmed eier og ukjent ID gir samme svar.
         raise not_found()
     return UserProductResponse.from_model(product)
+
+
+@router.get("/products/{product_id}/prices", response_model=ProductPriceResponse)
+async def get_my_product_prices(
+    product_id: str,
+    include_conditional: bool = Query(False),
+    cursor: str | None = Query(None),
+    limit: int | None = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        parsed_id = uuid.UUID(product_id)
+    except ValueError as exc:
+        raise not_found() from exc
+
+    return await ProductPriceV2Service(db).get_product_prices(
+        current_user.id,
+        parsed_id,
+        include_conditional=include_conditional,
+        cursor=cursor,
+        limit=limit,
+    )
 
 
 @router.get("/stores", response_model=UserStoreListResponse)

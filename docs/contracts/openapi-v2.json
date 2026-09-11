@@ -571,17 +571,121 @@
       },
       "ProductPriceResponse": {
         "type": "object",
-        "required": ["product_id", "currency", "price_basis", "historical_lowest", "latest_by_store", "eligible_store_count", "excluded_observation_count", "history"],
+        "required": ["product_id", "currency", "price_basis", "price_data_version", "historical_lowest", "latest_by_store", "eligible_store_count", "excluded_observation_count", "history"],
         "properties": {
           "product_id": { "type": "string", "format": "uuid" },
+          "display_name": { "type": "string" },
+          "brand": { "type": ["string", "null"] },
+          "variant": { "type": ["string", "null"] },
+          "pack_content": { "type": ["string", "null"] },
+          "pack_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "pack_count": { "type": ["string", "null"] },
           "currency": { "type": "string", "enum": ["NOK"] },
           "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
-          "historical_lowest": { "type": ["object", "null"] },
-          "latest_by_store": { "type": "array", "items": { "type": "object" } },
-          "eligible_store_count": { "type": "integer" },
+          "price_data_version": { "type": "integer", "description": "Kontoens monotone versjon. Endret verdi betyr foreldet pris-cache." },
+          "include_conditional": { "type": "boolean" },
+          "calculated_at": { "type": "string", "format": "date-time", "description": "Når prisene ble hentet. Ikke et kjøpstidspunkt." },
+          "historical_lowest": { "oneOf": [{ "$ref": "#/components/schemas/HistoricalLowest" }, { "type": "null" }] },
+          "latest_by_store": { "type": "array", "items": { "$ref": "#/components/schemas/LatestStorePrice" } },
+          "eligible_store_count": { "type": "integer", "description": "Butikker med identity_level=branch som har en kvalifisert observasjon." },
           "excluded_observation_count": { "type": "integer" },
-          "history": { "type": "object" },
+          "excluded_reasons": { "type": "object", "additionalProperties": { "type": "integer" }, "description": "Årsakskode til antall, regnet over hele grunnlaget." },
+          "history": { "$ref": "#/components/schemas/PriceHistory" },
           "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "PriceSourceRef": {
+        "type": "object",
+        "required": ["receipt_id", "revision_id", "revision", "line_id"],
+        "properties": {
+          "receipt_id": { "type": "string", "format": "uuid" },
+          "revision_id": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer" },
+          "line_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "HistoricalLowest": {
+        "type": "object",
+        "required": ["amount", "purchase_date", "store_id", "store_name", "store_identity", "condition", "age_label", "disclaimer", "source", "tied_stores"],
+        "properties": {
+          "amount": { "$ref": "#/components/schemas/DecimalString" },
+          "purchase_date": { "type": "string", "format": "date" },
+          "store_id": { "type": "string", "format": "uuid" },
+          "store_name": { "type": "string" },
+          "store_identity": { "type": "string", "enum": ["branch"] },
+          "condition": { "type": "string", "enum": ["none", "member", "multi_buy", "coupon"] },
+          "age_label": { "type": "string", "enum": ["registrert nylig", "eldre observasjon", "gammel observasjon"] },
+          "disclaimer": { "type": "string" },
+          "source": { "$ref": "#/components/schemas/PriceSourceRef" },
+          "tied_stores": {
+            "type": "array",
+            "description": "Alle delte førsteplasser, én rad per butikk, eldste kjøp først.",
+            "items": {
+              "type": "object",
+              "required": ["store_id", "name", "identity_level", "purchase_date"],
+              "properties": {
+                "store_id": { "type": "string", "format": "uuid" },
+                "name": { "type": "string" },
+                "identity_level": { "type": "string", "enum": ["branch"] },
+                "purchase_date": { "type": "string", "format": "date" }
+              }
+            }
+          }
+        }
+      },
+      "LatestStorePrice": {
+        "type": "object",
+        "description": "Siste sikre observasjon, eller samme-dags-usikkerhet når rekkefølgen ikke kan avgjøres.",
+        "required": ["store_id", "store_name", "identity_level", "certainty", "purchase_date", "observation_count", "age_label", "disclaimer", "sources"],
+        "properties": {
+          "store_id": { "type": "string", "format": "uuid" },
+          "store_name": { "type": "string" },
+          "identity_level": { "type": "string", "enum": ["branch"] },
+          "certainty": { "type": "string", "enum": ["certain", "same_day_uncertain"] },
+          "amount": { "oneOf": [{ "$ref": "#/components/schemas/DecimalString" }, { "type": "null" }], "description": "Null ved same_day_uncertain; bruk amount_range." },
+          "amount_range": {
+            "type": ["object", "null"],
+            "required": ["min", "max"],
+            "properties": {
+              "min": { "$ref": "#/components/schemas/DecimalString" },
+              "max": { "$ref": "#/components/schemas/DecimalString" }
+            }
+          },
+          "purchase_date": { "type": "string", "format": "date" },
+          "condition": { "type": ["string", "null"] },
+          "observation_count": { "type": "integer" },
+          "age_label": { "type": "string" },
+          "disclaimer": { "type": "string" },
+          "sources": { "type": "array", "items": { "$ref": "#/components/schemas/PriceSourceRef" } }
+        }
+      },
+      "PriceHistory": {
+        "type": "object",
+        "required": ["items", "total_count"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/PriceHistoryItem" } },
+          "total_count": { "type": "integer", "description": "Hele grunnlaget, ikke bare den returnerte siden." }
+        }
+      },
+      "PriceHistoryItem": {
+        "type": "object",
+        "required": ["price_basis", "date_precision", "condition", "ranked", "exclusion_reasons", "source"],
+        "properties": {
+          "amount": { "oneOf": [{ "$ref": "#/components/schemas/DecimalString" }, { "type": "null" }] },
+          "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
+          "purchase_date": { "type": ["string", "null"], "format": "date" },
+          "date_precision": { "type": "string", "enum": ["date", "datetime", "unknown"] },
+          "store_id": { "type": ["string", "null"], "format": "uuid" },
+          "store_name": { "type": ["string", "null"] },
+          "identity_level": { "type": ["string", "null"], "enum": ["branch", "chain_only", "unknown", null] },
+          "condition": { "type": "string", "enum": ["none", "member", "multi_buy", "coupon", "unknown"] },
+          "age_label": { "type": ["string", "null"] },
+          "ranked": { "type": "boolean" },
+          "exclusion_reasons": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["non_product_line", "non_nok", "unresolved_identity", "conditional", "unknown_condition", "unknown_discount", "unknown_unit", "unknown_quantity", "non_positive_quantity", "unknown_date", "unknown_store", "store_not_branch", "price_basis_mismatch"] }
+          },
+          "source": { "$ref": "#/components/schemas/PriceSourceRef" }
         }
       },
       "UserStore": {
