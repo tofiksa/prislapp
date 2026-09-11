@@ -6,7 +6,8 @@ from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account_ledger import AccountLedger
@@ -15,6 +16,8 @@ from app.models.receipt import Receipt, ReceiptStatus
 from app.models.receipt_item import ReceiptItem
 from app.models.receipt_revision import (
     PriceObservationV2,
+    ReceiptMutation,
+    ReceiptOperation,
     ReceiptRevision,
     ReceiptRevisionLine,
     RevisionStatus,
@@ -23,6 +26,8 @@ from app.models.store import Store
 from app.models.user import User
 from app.models.user_product import IdentityStatus, UserProduct
 from app.models.user_store import StoreIdentityLevel, UserStore
+from app.schemas.receipt_v2 import ReceiptConfirmV2Request
+from app.services.receipt_revision_service import payload_hash
 
 pytestmark = pytest.mark.asyncio
 
@@ -321,6 +326,137 @@ async def test_stale_expected_version_conflicts_with_the_current_version(
     assert body["current_version"] == 0
     assert [error["field"] for error in body["field_errors"]] == ["expected_version"]
     assert body["retryable"] is False
+
+
+def _lose_the_revision_race(db: AsyncSession, winner) -> None:
+    """La neste commit tape kappløpet om revisjonsnummeret.
+
+    Vinneren skriver ferdig først, og vår egen commit feiler på den unike
+    nøkkelen `(receipt_id, revision)` — nøyaktig slik databasen ville avvist to
+    samtidige bekreftelser med hver sin `mutation_id`.
+    """
+    real_commit = db.commit
+
+    async def commit() -> None:
+        db.commit = real_commit
+        await db.rollback()
+        await winner()
+        await real_commit()
+        raise IntegrityError(
+            "INSERT INTO receipt_revisions",
+            {},
+            Exception(
+                "UNIQUE constraint failed: "
+                "receipt_revisions.receipt_id, receipt_revisions.revision",
+            ),
+        )
+
+    db.commit = commit
+
+
+async def _competing_confirmation(
+    db: AsyncSession,
+    receipt_id: uuid.UUID,
+    user_id: uuid.UUID,
+    mutation_id: uuid.UUID | None = None,
+    response: dict | None = None,
+    digest: str | None = None,
+):
+    """Den samtidige bekreftelsen som rakk å skrive revisjon 1."""
+
+    async def winner() -> None:
+        db.add(
+            ReceiptRevision(
+                receipt_id=receipt_id,
+                user_id=user_id,
+                revision=1,
+                status=RevisionStatus.CONFIRMED.value,
+                operation=ReceiptOperation.CONFIRM.value,
+                mutation_id=mutation_id or uuid.uuid4(),
+            ),
+        )
+        if response is not None:
+            db.add(
+                ReceiptMutation(
+                    user_id=user_id,
+                    operation=ReceiptOperation.CONFIRM.value,
+                    mutation_id=mutation_id,
+                    payload_hash=digest,
+                    receipt_id=receipt_id,
+                    response=response,
+                ),
+            )
+        await db.execute(
+            update(Receipt)
+            .where(Receipt.id == receipt_id)
+            .values(version=1, status=ReceiptStatus.CONFIRMED.value),
+        )
+
+    return winner
+
+
+async def test_losing_the_revision_number_race_is_a_version_conflict(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    owner, headers = await _register(client, db_session, "owner@example.com")
+    receipt = await _ready_receipt(db_session, owner)
+    # Oppsettet må stå i databasen: taperens rollback skal bare kaste hans eget
+    # arbeid, ikke kvitteringen kappløpet handler om.
+    await db_session.commit()
+    _lose_the_revision_race(
+        db_session,
+        await _competing_confirmation(db_session, receipt.id, owner.id),
+    )
+
+    response = await _confirm(client, receipt, headers, _payload())
+
+    assert response.status_code == 409, response.text
+    body = response.json()
+    assert all(key in body for key in ERROR_KEYS)
+    assert body["code"] == "VERSION_CONFLICT"
+    assert body["current_version"] == 1
+    assert [error["field"] for error in body["field_errors"]] == ["expected_version"]
+
+
+async def test_losing_the_race_to_the_same_mutation_still_replays_the_response(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    owner, headers = await _register(client, db_session, "owner@example.com")
+    receipt = await _ready_receipt(db_session, owner)
+    await db_session.commit()
+    payload = _payload()
+    stored = {
+        "receipt_id": str(receipt.id),
+        "revision": 1,
+        "status": RevisionStatus.CONFIRMED.value,
+        "price_data_version": 2,
+        "reconciliation": {
+            "status": "balanced",
+            "printed_total": "25.00",
+            "computed_total": "25.00",
+            "difference": "0.00",
+            "gap_accepted": False,
+            "reason": None,
+        },
+    }
+    _lose_the_revision_race(
+        db_session,
+        await _competing_confirmation(
+            db_session,
+            receipt.id,
+            owner.id,
+            mutation_id=uuid.UUID(payload["mutation_id"]),
+            response=stored,
+            digest=payload_hash(ReceiptConfirmV2Request(**payload)),
+        ),
+    )
+
+    response = await _confirm(client, receipt, headers, payload)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == stored
 
 
 async def test_reconciliation_gap_without_acceptance_is_rejected(

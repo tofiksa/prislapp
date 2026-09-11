@@ -82,6 +82,26 @@ UNRESOLVED_LINE_AMOUNTS = "unresolved_line_amounts"
 QUALITY_RANKABLE = "rankable"
 QUALITY_RANKABLE_UNDATED = "rankable_undated"
 
+# Kappløpet om selve revisjonen: to samtidige skrivere passerte hver sin
+# `expected_version`-sjekk og siktet mot samme revisjonsnummer.
+REVISION_RACE_CONSTRAINTS = (
+    "uq_receipt_revisions_number",
+    "uq_receipt_revision_lines_line",
+)
+# SQLite navngir ikke constrainten i feilmeldingen, men lister kolonnene.
+REVISION_RACE_COLUMNS = (
+    "receipt_revisions.revision",
+    "receipt_revision_lines.line_id",
+)
+
+
+def is_revision_race(error: IntegrityError) -> bool:
+    message = str(error.orig)
+    return any(
+        marker in message
+        for marker in REVISION_RACE_CONSTRAINTS + REVISION_RACE_COLUMNS
+    )
+
 
 def version_conflict(current_version: int) -> ApiError:
     return ApiError(
@@ -372,7 +392,7 @@ class ReceiptRevisionService:
 
         try:
             await self.db.commit()
-        except IntegrityError:
+        except IntegrityError as error:
             # To samtidige forsøk med samme mutasjons-ID: den som mistet kappløpet
             # leverer det lagrede svaret i stedet for å skrive en ny revisjon.
             await self.db.rollback()
@@ -383,9 +403,15 @@ class ReceiptRevisionService:
                 request.mutation_id,
                 digest,
             )
-            if replay is None:
+            if replay is not None:
+                return replay
+            if not is_revision_race(error):
                 raise
-            return replay
+            # Hver sin mutasjons-ID, samme revisjonsnummer: begge passerte
+            # versjonssjekken, men bare én rakk å skrive. Taperen skal rette seg
+            # etter gjeldende versjon, ikke få en serverfeil.
+            current = await self._owned_receipt(user_id, receipt_id)
+            raise version_conflict(current.version) from error
         return response
 
     async def _lock_mutation(
