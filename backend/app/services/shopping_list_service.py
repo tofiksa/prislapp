@@ -33,8 +33,18 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.list_copy import (
+    MappedListLine,
+    SourceListLine,
+    SourceReceiptLine,
+    copy_list_lines,
+    map_receipt_lines,
+)
 from app.errors import ApiError, FieldError, invalid_cursor
 from app.models.account_ledger import AccountLedger
+from app.models.receipt import Receipt, ReceiptStatus
+from app.models.receipt_item import ReceiptItem
+from app.models.receipt_revision import ReceiptRevision, ReceiptRevisionLine, RevisionStatus
 from app.models.shopping_list import (
     ShoppingList,
     ShoppingListItem,
@@ -45,7 +55,9 @@ from app.models.shopping_list import (
 )
 from app.models.user_product import UserProduct
 from app.schemas.shopping_list import (
+    ShoppingListCopyRequest,
     ShoppingListCreateRequest,
+    ShoppingListFromReceiptRequest,
     ShoppingListItemCreateRequest,
     ShoppingListItemPatchRequest,
     ShoppingListPatchRequest,
@@ -58,6 +70,7 @@ from app.services.pagination import decode_cursor, encode_cursor, keyset, page_s
 # med; de er fortsatt en del av handleturen.
 MAX_ACTIVE_ITEMS = 200
 QUANTITY_QUANTUM = Decimal("0.001")
+DEFAULT_FROM_RECEIPT_NAME = "Handleliste"
 
 LIST_CURSOR_SCOPE = "shopping-lists:created"
 SYNC_CURSOR_VERSION = 1
@@ -341,6 +354,33 @@ class ShoppingListService:
             lambda: self._patch_list(user_id, list_id, request),
         )
 
+    async def copy_list(
+        self,
+        user_id: uuid.UUID,
+        list_id: uuid.UUID,
+        request: ShoppingListCopyRequest,
+    ) -> dict:
+        return await self._single(
+            user_id,
+            ShoppingListOperation.LIST_COPY,
+            request,
+            (list_id,),
+            lambda: self._copy_list(user_id, list_id, request),
+        )
+
+    async def create_list_from_receipt(
+        self,
+        user_id: uuid.UUID,
+        request: ShoppingListFromReceiptRequest,
+    ) -> dict:
+        return await self._single(
+            user_id,
+            ShoppingListOperation.LIST_FROM_RECEIPT,
+            request,
+            (request.receipt_id,),
+            lambda: self._create_list_from_receipt(user_id, request),
+        )
+
     async def create_item(
         self,
         user_id: uuid.UUID,
@@ -608,6 +648,188 @@ class ShoppingListService:
         await self.db.flush()
         items = [] if shopping_list.deleted_at is not None else await self._items(list_id)
         return Applied(list_response(shopping_list, items), shopping_list.id)
+
+    async def _copy_list(
+        self,
+        user_id: uuid.UUID,
+        list_id: uuid.UUID,
+        request: ShoppingListCopyRequest,
+    ) -> Applied:
+        source = await self._list_row(user_id, list_id)
+        if source.deleted_at is not None:
+            raise _not_found()
+        mapped = copy_list_lines(
+            self._source_list_lines(await self._items(list_id)),
+            unchecked_only=request.unchecked_only,
+        )
+        name = self._validated_name(request.name) if request.name is not None else source.name
+        return await self._materialize_mapped_list(user_id, name, request.id, mapped)
+
+    async def _create_list_from_receipt(
+        self,
+        user_id: uuid.UUID,
+        request: ShoppingListFromReceiptRequest,
+    ) -> Applied:
+        receipt = await self._confirmed_owned_receipt(user_id, request.receipt_id)
+        mapped = map_receipt_lines(
+            await self._source_receipt_lines(receipt),
+            await self._owned_product_ids(user_id),
+        )
+        name = (
+            self._validated_name(request.name)
+            if request.name is not None
+            else DEFAULT_FROM_RECEIPT_NAME
+        )
+        return await self._materialize_mapped_list(user_id, name, request.id, mapped)
+
+    async def _materialize_mapped_list(
+        self,
+        user_id: uuid.UUID,
+        name: str,
+        list_id: uuid.UUID | None,
+        mapped: list[MappedListLine],
+    ) -> Applied:
+        if list_id is not None:
+            await self._assert_free_id(ShoppingList, user_id, list_id, "id")
+        if len(mapped) > MAX_ACTIVE_ITEMS:
+            raise _item_limit()
+
+        sequence = await self._next_sequence(user_id)
+        now = _now()
+        shopping_list = ShoppingList(
+            id=list_id or uuid.uuid4(),
+            user_id=user_id,
+            name=name,
+            status=ShoppingListStatus.ACTIVE.value,
+            version=1,
+            content_seq=sequence,
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.add(shopping_list)
+        items: list[ShoppingListItem] = []
+        for position, line in enumerate(mapped):
+            sequence = await self._next_sequence(user_id)
+            item = ShoppingListItem(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                list_id=shopping_list.id,
+                user_product_id=line.user_product_id,
+                free_text=(
+                    None
+                    if line.user_product_id is not None
+                    else self._validated_reference(None, line.free_text)
+                ),
+                quantity=self._validated_quantity(line.quantity),
+                quantity_unit=line.quantity_unit,
+                checked=False,
+                position=position,
+                version=1,
+                sync_seq=sequence,
+                created_at=now,
+                updated_at=now,
+            )
+            self.db.add(item)
+            items.append(item)
+            self._touch(shopping_list, sequence, bump_version=False)
+        await self.db.flush()
+        return Applied(list_response(shopping_list, items), shopping_list.id)
+
+    @staticmethod
+    def _source_list_lines(items: list[ShoppingListItem]) -> list[SourceListLine]:
+        return [
+            SourceListLine(
+                id=item.id,
+                user_product_id=item.user_product_id,
+                free_text=item.free_text,
+                quantity=item.quantity,
+                quantity_unit=item.quantity_unit,
+                checked=item.checked,
+                position=item.position,
+                deleted=item.deleted_at is not None,
+            )
+            for item in items
+        ]
+
+    async def _source_receipt_lines(self, receipt: Receipt) -> list[SourceReceiptLine]:
+        revision = await self._latest_confirmed_revision(receipt)
+        if revision is not None:
+            result = await self.db.execute(
+                sa.select(ReceiptRevisionLine)
+                .where(ReceiptRevisionLine.revision_id == revision.id)
+                .order_by(ReceiptRevisionLine.position.asc(), ReceiptRevisionLine.id.asc()),
+            )
+            return [self._revision_source_line(line) for line in result.scalars().all()]
+
+        result = await self.db.execute(
+            sa.select(ReceiptItem)
+            .where(ReceiptItem.receipt_id == receipt.id)
+            .order_by(ReceiptItem.id.asc()),
+        )
+        return [
+            SourceReceiptLine(
+                line_type=item.line_type,
+                raw_product_name=item.raw_product_name,
+                user_product_id=None,
+                quantity=item.quantity,
+                quantity_unit=item.quantity_unit,
+                deleted=False,
+                position=index,
+            )
+            for index, item in enumerate(result.scalars().all())
+        ]
+
+    @staticmethod
+    def _revision_source_line(line: ReceiptRevisionLine) -> SourceReceiptLine:
+        deleted = False
+        if getattr(line, "deleted_at", None) is not None:
+            deleted = True
+        elif bool(getattr(line, "deleted", False)):
+            deleted = True
+        return SourceReceiptLine(
+            line_type=line.line_type,
+            raw_product_name=line.raw_product_name,
+            user_product_id=line.user_product_id,
+            quantity=line.quantity,
+            quantity_unit=line.quantity_unit,
+            deleted=deleted,
+            position=line.position,
+        )
+
+    async def _latest_confirmed_revision(self, receipt: Receipt) -> ReceiptRevision | None:
+        result = await self.db.execute(
+            sa.select(ReceiptRevision)
+            .where(
+                ReceiptRevision.receipt_id == receipt.id,
+                ReceiptRevision.user_id == receipt.user_id,
+                ReceiptRevision.status == RevisionStatus.CONFIRMED.value,
+            )
+            .order_by(ReceiptRevision.revision.desc())
+            .limit(1),
+        )
+        return result.scalar_one_or_none()
+
+    async def _confirmed_owned_receipt(
+        self,
+        user_id: uuid.UUID,
+        receipt_id: uuid.UUID,
+    ) -> Receipt:
+        result = await self.db.execute(
+            sa.select(Receipt).where(
+                Receipt.id == receipt_id,
+                Receipt.user_id == user_id,
+            ),
+        )
+        receipt = result.scalar_one_or_none()
+        if receipt is None or receipt.status != ReceiptStatus.CONFIRMED.value:
+            raise _not_found()
+        return receipt
+
+    async def _owned_product_ids(self, user_id: uuid.UUID) -> set[uuid.UUID]:
+        result = await self.db.execute(
+            sa.select(UserProduct.id).where(UserProduct.user_id == user_id),
+        )
+        return set(result.scalars().all())
 
     async def _create_item(
         self,

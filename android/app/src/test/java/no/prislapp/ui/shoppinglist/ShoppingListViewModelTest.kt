@@ -117,6 +117,134 @@ class ShoppingListViewModelTest {
     }
 
     @Test
+    fun finishTripKeepingUncheckedShowsTheCopyNotTheArchivedSource() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        fixture.items.value = listOf(
+            item(id = "keep", freeText = "Brød", checked = false),
+            item(id = "drop", freeText = "Melk", checked = true),
+        )
+        coEvery { fixture.repo.finishTrip("list-1", true) } coAnswers {
+            fixture.lists.value = listOf(
+                listEntity().copy(status = ShoppingListEntity.STATUS_ARCHIVED),
+                ShoppingListEntity(
+                    id = "list-2",
+                    userId = "user-a",
+                    name = "Handleliste",
+                    createdAt = "2026-09-11T12:00:00Z",
+                    updatedAt = "2026-09-11T12:00:00Z",
+                ),
+            )
+            fixture.items.value = listOf(
+                item(id = "new-keep", freeText = "Brød").copy(listId = "list-2"),
+            )
+            "list-2"
+        }
+        val vm = fixture.createViewModel()
+        advanceUntilIdle()
+
+        vm.finishTrip(keepUnchecked = true)
+        advanceUntilIdle()
+
+        assertEquals("list-2", vm.uiState.value.listId)
+        assertEquals(listOf("new-keep"), vm.uiState.value.items.map { it.id })
+        assertTrue(vm.uiState.value.items.none { it.checked })
+        assertTrue(vm.uiState.value.showAddReceiptPrompt)
+    }
+
+    @Test
+    fun finishTripWithoutKeepingLeavesANewActiveListNotTheArchivedOne() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        fixture.items.value = listOf(item(id = "item-1", freeText = "Melk"))
+        coEvery { fixture.repo.finishTrip("list-1", false) } coAnswers {
+            fixture.lists.value = listOf(
+                listEntity().copy(status = ShoppingListEntity.STATUS_ARCHIVED),
+                ShoppingListEntity(
+                    id = "list-2",
+                    userId = "user-a",
+                    name = "Handleliste",
+                    createdAt = "2026-09-11T12:00:00Z",
+                    updatedAt = "2026-09-11T12:00:00Z",
+                ),
+            )
+            fixture.items.value = emptyList()
+            "list-2"
+        }
+        val vm = fixture.createViewModel()
+        advanceUntilIdle()
+
+        vm.finishTrip(keepUnchecked = false)
+        advanceUntilIdle()
+
+        assertEquals("list-2", vm.uiState.value.listId)
+        assertTrue(vm.uiState.value.items.isEmpty())
+        assertTrue(vm.uiState.value.showAddReceiptPrompt)
+    }
+
+    @Test
+    fun doubleFinishTripInMutexDoesNotArchiveTwice() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        coEvery { fixture.repo.finishTrip(any(), any()) } coAnswers {
+            delay(50)
+            "list-2"
+        }
+        val vm = fixture.createViewModel()
+        advanceUntilIdle()
+
+        vm.finishTrip(keepUnchecked = true)
+        vm.finishTrip(keepUnchecked = true)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { fixture.repo.finishTrip("list-1", true) }
+    }
+
+    @Test
+    fun checkingAnItemDoesNotArchiveTheList() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        fixture.items.value = listOf(item(id = "item-1", freeText = "Melk"))
+        val vm = fixture.createViewModel()
+        advanceUntilIdle()
+
+        vm.setChecked("item-1", true)
+        advanceUntilIdle()
+
+        coVerify { fixture.repo.setItemChecked("list-1", "item-1", true) }
+        coVerify(exactly = 0) { fixture.repo.setListArchived(any(), any()) }
+        coVerify(exactly = 0) { fixture.repo.finishTrip(any(), any()) }
+        assertEquals("list-1", vm.uiState.value.listId)
+    }
+
+    @Test
+    fun afterTheActiveListDisappearsANewDefaultListIsCreated() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        val vm = fixture.createViewModel()
+        advanceUntilIdle()
+        clearMocks(fixture.repo, answers = false, recordedCalls = true)
+        coEvery { fixture.repo.createList(any()) } coAnswers {
+            fixture.lists.value = listOf(
+                ShoppingListEntity(
+                    id = "list-2",
+                    userId = "user-a",
+                    name = "Handleliste",
+                    createdAt = "2026-09-11T12:00:00Z",
+                    updatedAt = "2026-09-11T12:00:00Z",
+                ),
+            )
+            "list-2"
+        }
+
+        fixture.lists.value = listOf(listEntity().copy(status = ShoppingListEntity.STATUS_ARCHIVED))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { fixture.repo.createList("Handleliste") }
+        assertEquals("list-2", vm.uiState.value.listId)
+    }
+
+    @Test
     fun tenCachedProductsAreAddedByUserProductIdNeverFreeText() = runTest(dispatcher) {
         val fixture = Fixture()
         val products = (1..10).map { index ->

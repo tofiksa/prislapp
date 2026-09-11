@@ -21,6 +21,15 @@ interface ShoppingListItemDao {
     @Query("SELECT * FROM shopping_list_items WHERE id = :id AND userId = :userId")
     suspend fun get(id: String, userId: String): ShoppingListItemEntity?
 
+    @Query(
+        """
+        SELECT * FROM shopping_list_items
+        WHERE listId = :listId AND userId = :userId
+        ORDER BY position ASC, id ASC
+        """,
+    )
+    suspend fun getForList(listId: String, userId: String): List<ShoppingListItemEntity>
+
     @Query("DELETE FROM shopping_list_items WHERE id = :id AND userId = :userId")
     suspend fun delete(id: String, userId: String)
 

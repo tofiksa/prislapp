@@ -35,6 +35,20 @@ class ShoppingListPatchRequest(BaseModel):
     deleted: bool | None = None
 
 
+class ShoppingListCopyRequest(BaseModel):
+    mutation_id: uuid.UUID
+    id: uuid.UUID | None = None
+    name: str | None = Field(default=None, max_length=255)
+    unchecked_only: bool = False
+
+
+class ShoppingListFromReceiptRequest(BaseModel):
+    receipt_id: uuid.UUID
+    mutation_id: uuid.UUID
+    id: uuid.UUID | None = None
+    name: str | None = Field(default=None, max_length=255)
+
+
 class ShoppingListItemCreateRequest(BaseModel):
     mutation_id: uuid.UUID
     id: uuid.UUID | None = None

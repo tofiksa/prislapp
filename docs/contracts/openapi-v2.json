@@ -321,6 +321,28 @@
         }
       }
     },
+    "/v2/shopping-lists/from-receipt": {
+      "post": {
+        "operationId": "createShoppingListFromReceipt",
+        "description": "Ny aktiv liste fra bekreftet kvittering. Kopierer ikke prisobservasjoner. Slettet eller fremmed vare blir fritekst uten produkt-ID.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListFromReceipt" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/v2/shopping-lists/{id}": {
       "get": {
         "operationId": "getShoppingList",
@@ -355,6 +377,31 @@
               "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
             }
           },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}/copy": {
+      "post": {
+        "operationId": "copyShoppingList",
+        "description": "Ny aktiv liste med nye linje-ID-er. Alle linjer er ukrysset. Arkivert kilde kan kopieres. Slettet eller fremmed kilde gir 404.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListCopy" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
           "409": { "$ref": "#/components/responses/Error" }
         }
       }
@@ -814,6 +861,30 @@
           "id": { "type": "string", "format": "uuid" },
           "name": { "type": "string" },
           "mutation_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "ShoppingListCopy": {
+        "type": "object",
+        "required": ["mutation_id"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "unchecked_only": {
+            "type": "boolean",
+            "default": false,
+            "description": "true tar bare ikke-slettede, ikke-avkryssede kildelinjer. Brukes av Fullfør handletur."
+          }
+        }
+      },
+      "ShoppingListFromReceipt": {
+        "type": "object",
+        "required": ["receipt_id", "mutation_id"],
+        "properties": {
+          "receipt_id": { "type": "string", "format": "uuid" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" }
         }
       },
       "ShoppingListPatch": {

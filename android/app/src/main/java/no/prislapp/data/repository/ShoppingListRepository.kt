@@ -23,6 +23,7 @@ import no.prislapp.data.local.entity.SyncConflictEntity
 import no.prislapp.data.local.entity.SyncStateEntity
 import no.prislapp.data.remote.PrislappApi
 import no.prislapp.data.remote.dto.ShoppingListDto
+import no.prislapp.data.remote.dto.ShoppingListFromReceiptRequest
 import no.prislapp.data.remote.dto.ShoppingListItemDto
 import no.prislapp.data.remote.dto.SyncMutationDto
 import no.prislapp.data.remote.dto.SyncRequestDto
@@ -276,6 +277,102 @@ class ShoppingListRepository @Inject constructor(
         }
     }
 
+    suspend fun copyList(listId: String, uncheckedOnly: Boolean = false): String {
+        val userId = requireUser()
+        val newListId = UUID.randomUUID().toString()
+        val now = Instant.now().toString()
+        transactionRunner.run {
+            val source = listDao.get(listId, userId) ?: error("Listen finnes ikke")
+            val sourceItems = itemDao.getForList(listId, userId)
+                .filter { !it.deleted }
+                .filter { !uncheckedOnly || !it.checked }
+            listDao.upsert(
+                ShoppingListEntity(
+                    id = newListId,
+                    userId = userId,
+                    name = source.name,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+            outboxDao.upsert(
+                toOutbox(
+                    SyncMutationDto(
+                        operation = MutationOutboxEntity.OP_LIST_CREATE,
+                        mutation_id = UUID.randomUUID().toString(),
+                        id = newListId,
+                        name = source.name,
+                    ),
+                    userId,
+                    listId = newListId,
+                ),
+            )
+            sourceItems.forEachIndexed { index, item ->
+                val itemId = UUID.randomUUID().toString()
+                itemDao.upsert(
+                    ShoppingListItemEntity(
+                        id = itemId,
+                        listId = newListId,
+                        userId = userId,
+                        userProductId = item.userProductId,
+                        freeText = item.freeText,
+                        quantity = item.quantity,
+                        quantityUnit = item.quantityUnit,
+                        checked = false,
+                        position = index,
+                    ),
+                )
+                outboxDao.upsert(
+                    toOutbox(
+                        SyncMutationDto(
+                            operation = MutationOutboxEntity.OP_ITEM_CREATE,
+                            mutation_id = UUID.randomUUID().toString(),
+                            list_id = newListId,
+                            id = itemId,
+                            user_product_id = item.userProductId,
+                            free_text = item.freeText,
+                            quantity = item.quantity,
+                            quantity_unit = item.quantityUnit,
+                            checked = false,
+                            position = index,
+                        ),
+                        userId,
+                        listId = newListId,
+                        itemId = itemId,
+                    ),
+                )
+            }
+        }
+        enqueueSync()
+        return newListId
+    }
+
+    suspend fun copyFromReceipt(receiptId: String): String {
+        val userId = requireUser()
+        val response = api.createShoppingListFromReceipt(
+            ShoppingListFromReceiptRequest(
+                receipt_id = receiptId,
+                mutation_id = UUID.randomUUID().toString(),
+                id = UUID.randomUUID().toString(),
+            ),
+            userId,
+        )
+        transactionRunner.run {
+            persistServerList(response, userId)
+        }
+        return response.id
+    }
+
+    suspend fun finishTrip(listId: String, keepUnchecked: Boolean): String {
+        val newId = if (keepUnchecked) {
+            copyList(listId, uncheckedOnly = true)
+        } else {
+            createList(DEFAULT_NEW_LIST_NAME)
+        }
+        setListArchived(listId, true)
+        return newId
+    }
+
     suspend fun getItem(itemId: String): ShoppingListItemEntity? {
         val userId = accountSession.currentUserId() ?: return null
         return itemDao.get(itemId, userId)
@@ -472,6 +569,13 @@ class ShoppingListRepository @Inject constructor(
         )
     }
 
+    private suspend fun persistServerList(list: ShoppingListDto, userId: String) {
+        listDao.upsert(list.toEntity(userId))
+        for (item in list.items) {
+            itemDao.upsert(item.toEntity(list.id, userId))
+        }
+    }
+
     private fun requireUser(): String = checkNotNull(accountSession.currentUserId()) { "Logg inn først" }
 
     private fun enqueueSync() {
@@ -525,4 +629,8 @@ class ShoppingListRepository @Inject constructor(
         version = version,
         deleted = deleted,
     )
+
+    companion object {
+        const val DEFAULT_NEW_LIST_NAME = "Handleliste"
+    }
 }

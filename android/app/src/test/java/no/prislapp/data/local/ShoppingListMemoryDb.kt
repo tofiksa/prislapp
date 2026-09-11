@@ -74,6 +74,10 @@ class FakeShoppingListItemDao(private val db: ShoppingListMemoryDb) : ShoppingLi
     override suspend fun get(id: String, userId: String) =
         db.items.find { it.id == id && it.userId == userId }
 
+    override suspend fun getForList(listId: String, userId: String) =
+        db.items.filter { it.listId == listId && it.userId == userId }
+            .sortedWith(compareBy({ it.position }, { it.id }))
+
     override suspend fun delete(id: String, userId: String) {
         db.items.removeAll { it.id == id && it.userId == userId }
         db.publish()

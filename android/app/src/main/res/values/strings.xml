@@ -117,4 +117,15 @@
     <string name="shopping_list_price_receipt">Kvittering %1$s</string>
     <string name="shopping_list_price_refresh_failed">Kunne ikke oppdatere prisene. Sist hentede priser vises.</string>
     <string name="shopping_list_close_price_detail">Lukk prisopplysninger</string>
+    <string name="shopping_list_finish_trip">Fullfør handletur</string>
+    <string name="shopping_list_finish_trip_message">Listen arkiveres. Du kan ta med uavkryssede varer i en ny liste.</string>
+    <string name="shopping_list_keep_unchecked">Ta med uavkryssede varer i ny liste</string>
+    <string name="shopping_list_finish_confirm">Fullfør</string>
+    <string name="shopping_list_add_receipt_title">Vil du legge til kvitteringen?</string>
+    <string name="shopping_list_add_receipt_camera">Ta bilde</string>
+    <string name="shopping_list_add_receipt_later">Ikke nå</string>
+    <string name="shopping_list_copy">Kopier liste</string>
+    <string name="shopping_list_new">Ny liste</string>
+    <string name="use_in_shopping_list">Bruk i handleliste</string>
+    <string name="use_in_shopping_list_failed">Kunne ikke legge kvitteringen i handlelisten.</string>
 </resources>

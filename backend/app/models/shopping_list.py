@@ -49,6 +49,8 @@ class ShoppingListOperation(str, enum.Enum):
     LIST_PATCH = "list_patch"
     ITEM_CREATE = "item_create"
     ITEM_PATCH = "item_patch"
+    LIST_COPY = "list_copy"
+    LIST_FROM_RECEIPT = "list_from_receipt"
 
 
 class ShoppingList(Base):

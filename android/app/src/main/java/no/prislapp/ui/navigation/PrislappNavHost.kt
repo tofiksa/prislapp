@@ -120,6 +120,7 @@ fun PrislappNavHost(
                 ShoppingListScreen(
                     firstReceiptReadyCount = ctaCount.takeIf { it > 0 },
                     onLogout = { authViewModel.logout() },
+                    onCaptureReceipt = { navController.navigate(Routes.CAMERA) },
                 )
             }
             composable(Routes.RECEIPTS) {
@@ -131,6 +132,7 @@ fun PrislappNavHost(
                     onOpenPending = { localId ->
                         navController.navigate(Routes.processing(localId))
                     },
+                    onCopiedToShoppingList = { navController.navigateToTab(Routes.SHOPPING_LIST) },
                     onLogout = { authViewModel.logout() },
                 )
             }

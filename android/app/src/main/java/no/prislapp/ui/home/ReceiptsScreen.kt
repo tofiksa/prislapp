@@ -63,6 +63,7 @@ fun ReceiptsScreen(
     onCaptureReceipt: () -> Unit,
     onOpenReceipt: (receiptId: String) -> Unit,
     onOpenPending: (localId: Long) -> Unit,
+    onCopiedToShoppingList: () -> Unit = {},
     onLogout: () -> Unit,
     homeViewModel: HomeViewModel = hiltViewModel(),
     historyViewModel: HistoryViewModel = hiltViewModel(),
@@ -274,6 +275,18 @@ fun ReceiptsScreen(
                     subtitle = formatReceiptSubtitle(receipt.purchase_date, receipt.total),
                     statusLabel = receiptStatusLabel(receipt.status),
                     onClick = { onOpenReceipt(receipt.id) },
+                    actionLabel = if (receipt.status == "CONFIRMED") {
+                        stringResource(R.string.use_in_shopping_list)
+                    } else {
+                        null
+                    },
+                    onAction = if (receipt.status == "CONFIRMED") {
+                        {
+                            historyViewModel.useInShoppingList(receipt.id, onCopiedToShoppingList)
+                        }
+                    } else {
+                        null
+                    },
                 )
             }
 

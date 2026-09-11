@@ -16,12 +16,13 @@ class HistoryViewModelTest {
     @After fun cleanup() { Dispatchers.resetMain() }
     @Test fun loadsMoreThanFirstPageAndResetsWhenFilterChanges() = runTest {
         val repo = mockk<ReceiptRepository>()
+        val lists = mockk<no.prislapp.data.repository.ShoppingListRepository>(relaxUnitFun = true)
         coEvery { repo.listStores() } returns StoreListResponse(emptyList())
         coEvery { repo.listReceiptsFiltered(any(), any(), any(), any(), any()) } answers {
             val page = firstArg<Int>()
             ReceiptListResponse(listOf(ReceiptSummaryResponse("$page", "CONFIRMED", null, null, null, "")), 2, page, 1)
         }
-        val vm = HistoryViewModel(repo)
+        val vm = HistoryViewModel(repo, lists)
         advanceUntilIdle()
         assertTrue(vm.uiState.value.hasMore)
         vm.loadMore(); advanceUntilIdle()

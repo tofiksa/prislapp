@@ -37,6 +37,20 @@ data class ShoppingListCreateRequest(
     val id: String? = null,
 )
 
+data class ShoppingListFromReceiptRequest(
+    val receipt_id: String,
+    val mutation_id: String,
+    val id: String? = null,
+    val name: String? = null,
+)
+
+data class ShoppingListCopyRequest(
+    val mutation_id: String,
+    val id: String? = null,
+    val name: String? = null,
+    val unchecked_only: Boolean = false,
+)
+
 data class ShoppingListPatchRequest(
     val expected_version: Int,
     val mutation_id: String,

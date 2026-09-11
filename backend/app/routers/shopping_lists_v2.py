@@ -15,7 +15,9 @@ from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.shopping_list import (
     ShoppingListCollectionResponse,
+    ShoppingListCopyRequest,
     ShoppingListCreateRequest,
+    ShoppingListFromReceiptRequest,
     ShoppingListItemCreateRequest,
     ShoppingListItemPatchRequest,
     ShoppingListItemResponse,
@@ -58,6 +60,15 @@ async def list_shopping_lists(
     return ShoppingListCollectionResponse(items=items, next_cursor=next_cursor)
 
 
+@router.post("/from-receipt", response_model=ShoppingListResponse, status_code=201)
+async def create_shopping_list_from_receipt(
+    body: ShoppingListFromReceiptRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await ShoppingListService(db).create_list_from_receipt(current_user.id, body)
+
+
 @router.get("/{list_id}", response_model=ShoppingListResponse)
 async def get_shopping_list(
     list_id: uuid.UUID,
@@ -89,6 +100,16 @@ async def patch_shopping_list(
     db: AsyncSession = Depends(get_db),
 ):
     return await ShoppingListService(db).patch_list(current_user.id, list_id, body)
+
+
+@router.post("/{list_id}/copy", response_model=ShoppingListResponse, status_code=201)
+async def copy_shopping_list(
+    list_id: uuid.UUID,
+    body: ShoppingListCopyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await ShoppingListService(db).copy_list(current_user.id, list_id, body)
 
 
 @router.post("/{list_id}/items", response_model=ShoppingListItemResponse, status_code=201)

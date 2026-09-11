@@ -43,6 +43,8 @@ class ShoppingListViewModel @Inject constructor(
     val uiState: StateFlow<ShoppingListUiState> = _uiState.asStateFlow()
     private val writeMutex = Mutex()
     private var defaultListRequested = false
+    private var hadActiveList = false
+    private var finishInFlight = false
 
     @Volatile
     private var catalogRefreshFailed = false
@@ -200,6 +202,45 @@ class ShoppingListViewModel @Inject constructor(
         _uiState.update { it.copy(pendingUndo = null) }
     }
 
+    fun finishTrip(keepUnchecked: Boolean) {
+        if (finishInFlight) return
+        finishInFlight = true
+        viewModelScope.launch {
+            writeMutex.withLock {
+                try {
+                    val listId = _uiState.value.listId ?: return@withLock
+                    val newId = repository.finishTrip(listId, keepUnchecked)
+                    _uiState.update { it.copy(listId = newId, showAddReceiptPrompt = true) }
+                } finally {
+                    finishInFlight = false
+                }
+            }
+        }
+    }
+
+    fun dismissAddReceiptPrompt() {
+        _uiState.update { it.copy(showAddReceiptPrompt = false) }
+    }
+
+    fun copyCurrentList() {
+        viewModelScope.launch {
+            writeMutex.withLock {
+                val listId = _uiState.value.listId ?: return@withLock
+                val newId = repository.copyList(listId)
+                _uiState.update { it.copy(listId = newId) }
+            }
+        }
+    }
+
+    fun newList() {
+        viewModelScope.launch {
+            writeMutex.withLock {
+                val id = repository.createList(DEFAULT_LIST_NAME)
+                _uiState.update { it.copy(listId = id, listName = DEFAULT_LIST_NAME) }
+            }
+        }
+    }
+
     fun openPriceDetail(itemId: String) {
         val item = _uiState.value.items.find { it.id == itemId } ?: return
         val line = displayedSummary?.lines?.find { it.item_id == itemId }
@@ -242,6 +283,10 @@ class ShoppingListViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .flatMapLatest { lists ->
                     if (lists.isEmpty()) {
+                        if (hadActiveList) {
+                            defaultListRequested = false
+                            hadActiveList = false
+                        }
                         if (!defaultListRequested) {
                             defaultListRequested = true
                             val id = repository.createList(DEFAULT_LIST_NAME)
@@ -254,7 +299,11 @@ class ShoppingListViewModel @Inject constructor(
                             Triple(null as ShoppingListEntity?, emptyList<ShoppingListItemEntity>(), Pair(conflicts, products))
                         }
                     } else {
-                        val selected = lists.first()
+                        hadActiveList = true
+                        defaultListRequested = true
+                        val selected = lists.maxWith(
+                            compareBy<ShoppingListEntity> { it.createdAt }.thenBy { it.updatedAt },
+                        )
                         combine(
                             repository.observeItems(selected.id),
                             repository.observeConflicts(),
@@ -279,6 +328,7 @@ class ShoppingListViewModel @Inject constructor(
                             showAddSheet = previous.showAddSheet,
                             priceDetail = previous.priceDetail,
                             firstReceiptCtaCount = previous.firstReceiptCtaCount,
+                            showAddReceiptPrompt = previous.showAddReceiptPrompt,
                         )
                     }
                     val listId = mapped.listId ?: _uiState.value.listId
@@ -363,6 +413,7 @@ class ShoppingListViewModel @Inject constructor(
                 showAddSheet = previous.showAddSheet,
                 priceDetail = previous.priceDetail,
                 firstReceiptCtaCount = previous.firstReceiptCtaCount,
+                showAddReceiptPrompt = previous.showAddReceiptPrompt,
             )
         }
     }

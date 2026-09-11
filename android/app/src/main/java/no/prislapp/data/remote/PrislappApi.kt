@@ -10,8 +10,10 @@ import no.prislapp.data.remote.dto.ReceiptListResponse
 import no.prislapp.data.remote.dto.ReceiptUploadResponse
 import no.prislapp.data.remote.dto.RegisterRequest
 import no.prislapp.data.remote.dto.ShoppingListCollectionDto
+import no.prislapp.data.remote.dto.ShoppingListCopyRequest
 import no.prislapp.data.remote.dto.ShoppingListCreateRequest
 import no.prislapp.data.remote.dto.ShoppingListDto
+import no.prislapp.data.remote.dto.ShoppingListFromReceiptRequest
 import no.prislapp.data.remote.dto.ShoppingListItemDto
 import no.prislapp.data.remote.dto.ShoppingListItemPatchRequest
 import no.prislapp.data.remote.dto.ShoppingListItemUpsertRequest
@@ -134,6 +136,19 @@ interface PrislappApi {
     suspend fun patchShoppingList(
         @Path("id") id: String,
         @Body body: ShoppingListPatchRequest,
+        @Header("X-Local-User") userId: String,
+    ): ShoppingListDto
+
+    @POST("v2/shopping-lists/{id}/copy")
+    suspend fun copyShoppingList(
+        @Path("id") id: String,
+        @Body body: ShoppingListCopyRequest,
+        @Header("X-Local-User") userId: String,
+    ): ShoppingListDto
+
+    @POST("v2/shopping-lists/from-receipt")
+    suspend fun createShoppingListFromReceipt(
+        @Body body: ShoppingListFromReceiptRequest,
         @Header("X-Local-User") userId: String,
     ): ShoppingListDto
 

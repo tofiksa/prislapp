@@ -340,6 +340,65 @@ class ShoppingListRepositoryTest {
         assertFalse(json.contains("\"pack_content\":1"))
     }
 
+    @Test
+    fun copyListAssignsNewIdsUncheckedAndDoesNotCallIncrement() = runTest {
+        val fixture = Fixture()
+        val repository = spyk(fixture.repository())
+        val listId = repository.createList("Tur")
+        val checkedId = repository.addItem(listId, freeText = "Melk")
+        repository.addItem(listId, userProductId = "p-melk", productDisplayName = "Melk")
+        repository.setItemChecked(listId, checkedId, true)
+
+        val copyId = repository.copyList(listId)
+
+        assertTrue(copyId != listId)
+        val copies = fixture.db.items.filter { it.listId == copyId && !it.deleted }.sortedBy { it.position }
+        val sources = fixture.db.items.filter { it.listId == listId && !it.deleted }
+        assertEquals(2, copies.size)
+        assertEquals(sources.size, copies.size)
+        assertTrue(copies.all { !it.checked })
+        assertTrue(copies.none { source -> sources.any { it.id == source.id } })
+        assertEquals(listOf("Melk", null), copies.map { it.freeText })
+        coVerify(exactly = 0) { repository.addProductOrIncrement(any(), any(), any(), any(), any()) }
+        val copyOps = fixture.db.outbox.filter { it.listId == copyId }.map { it.operation }
+        assertEquals("list_create", copyOps.first())
+        assertTrue(copyOps.drop(1).all { it == "item_create" })
+    }
+
+    @Test
+    fun finishTripKeepingUncheckedArchivesSourceAndCopiesOpenLines() = runTest {
+        val fixture = Fixture()
+        val repository = fixture.repository()
+        val listId = repository.createList("Tur")
+        val keepId = repository.addItem(listId, freeText = "Brød")
+        val dropId = repository.addItem(listId, freeText = "Melk")
+        repository.setItemChecked(listId, dropId, true)
+
+        val newId = repository.finishTrip(listId, keepUnchecked = true)
+
+        assertEquals("archived", fixture.db.lists.single { it.id == listId }.status)
+        assertEquals("active", fixture.db.lists.single { it.id == newId }.status)
+        val copies = fixture.db.items.filter { it.listId == newId && !it.deleted }
+        assertEquals(listOf("Brød"), copies.map { it.freeText })
+        assertTrue(copies.single().id != keepId)
+        assertFalse(copies.single().checked)
+    }
+
+    @Test
+    fun finishTripWithoutKeepingArchivesAndLeavesANewActiveList() = runTest {
+        val fixture = Fixture()
+        val repository = fixture.repository()
+        val listId = repository.createList("Tur")
+        repository.addItem(listId, freeText = "Melk")
+
+        val newId = repository.finishTrip(listId, keepUnchecked = false)
+
+        assertTrue(newId != listId)
+        assertEquals("archived", fixture.db.lists.single { it.id == listId }.status)
+        assertEquals("active", fixture.db.lists.single { it.id == newId }.status)
+        assertTrue(fixture.db.items.none { it.listId == newId && !it.deleted })
+    }
+
     private class Fixture(
         private val transactionRunner: TransactionRunner = object : TransactionRunner {
             override suspend fun <T> run(block: suspend () -> T): T = block()

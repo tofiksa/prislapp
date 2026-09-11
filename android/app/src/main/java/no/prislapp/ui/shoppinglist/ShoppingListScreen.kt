@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -67,12 +68,15 @@ import no.prislapp.ui.components.PrislappTopBar
 fun ShoppingListScreen(
     firstReceiptReadyCount: Int? = null,
     onLogout: () -> Unit = {},
+    onCaptureReceipt: () -> Unit = {},
     viewModel: ShoppingListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listSnackbarHostState = remember { SnackbarHostState() }
     val sheetSnackbarHostState = remember { SnackbarHostState() }
     var accountMenuExpanded by remember { mutableStateOf(false) }
+    var showFinishDialog by remember { mutableStateOf(false) }
+    var keepUnchecked by remember { mutableStateOf(true) }
     val undoMessage = when (uiState.pendingUndo) {
         is ShoppingListUndo.RestoreQuantity -> stringResource(R.string.shopping_list_quantity_updated)
         is ShoppingListUndo.Undelete -> stringResource(R.string.shopping_list_item_removed)
@@ -126,6 +130,28 @@ fun ShoppingListScreen(
                         expanded = accountMenuExpanded,
                         onDismissRequest = { accountMenuExpanded = false },
                     ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.shopping_list_finish_trip)) },
+                            onClick = {
+                                accountMenuExpanded = false
+                                keepUnchecked = uiState.items.any { !it.checked }
+                                showFinishDialog = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.shopping_list_copy)) },
+                            onClick = {
+                                accountMenuExpanded = false
+                                viewModel.copyCurrentList()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.shopping_list_new)) },
+                            onClick = {
+                                accountMenuExpanded = false
+                                viewModel.newList()
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.logout)) },
                             onClick = {
@@ -248,6 +274,76 @@ fun ShoppingListScreen(
         PriceDetailSheet(
             detail = detail,
             onDismiss = viewModel::dismissPriceDetail,
+        )
+    }
+
+    if (showFinishDialog) {
+        AlertDialog(
+            onDismissRequest = { showFinishDialog = false },
+            title = { Text(stringResource(R.string.shopping_list_finish_trip)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.shopping_list_finish_trip_message))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = keepUnchecked,
+                            onCheckedChange = { keepUnchecked = it },
+                        )
+                        Text(stringResource(R.string.shopping_list_keep_unchecked))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showFinishDialog = false
+                        viewModel.finishTrip(keepUnchecked)
+                    },
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text(stringResource(R.string.shopping_list_finish_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showFinishDialog = false },
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (uiState.showAddReceiptPrompt) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissAddReceiptPrompt,
+            title = { Text(stringResource(R.string.shopping_list_add_receipt_title)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.dismissAddReceiptPrompt()
+                        onCaptureReceipt()
+                    },
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text(stringResource(R.string.shopping_list_add_receipt_camera))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = viewModel::dismissAddReceiptPrompt,
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text(stringResource(R.string.shopping_list_add_receipt_later))
+                }
+            },
         )
     }
 }
