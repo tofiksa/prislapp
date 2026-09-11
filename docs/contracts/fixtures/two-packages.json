@@ -1,0 +1,13 @@
+{
+  "id": "two-packages",
+  "description": "To pakker til sammen 40,00 gir 20,00 per pakke.",
+  "line_type": "product",
+  "currency": "NOK",
+  "quantity_unit": "each",
+  "package_count": "2",
+  "net_line_total": "40.00",
+  "price_basis": "per_package",
+  "comparison_price": "20.000000",
+  "display_price": "20.00",
+  "eligible": true
+}

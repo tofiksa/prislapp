@@ -1,0 +1,13 @@
+{
+  "id": "discount-allocated",
+  "description": "Vare 40,00 + separat rabatt -10,00 gir 30,00 når sikkert tilordnet.",
+  "line_type": "product",
+  "gross_line_total": "40.00",
+  "allocated_discount": "10.00",
+  "net_line_total": "30.00",
+  "price_basis": "per_package",
+  "package_count": "1",
+  "comparison_price": "30.000000",
+  "eligible": true,
+  "condition": "none"
+}

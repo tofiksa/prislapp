@@ -1,0 +1,739 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Prislapp API v2",
+    "version": "2.0.0-p0",
+    "description": "Nye og endrede kontrakter for handlehjelp. Eksisterende v1-ruter under /auth, /receipts, /products og /stores beholdes i overgangen. Penger og mengder er desimalstrenger."
+  },
+  "servers": [
+    { "url": "http://localhost:8000", "description": "Lokal utvikling" }
+  ],
+  "paths": {
+    "/auth/password-reset/request": {
+      "post": {
+        "operationId": "requestPasswordReset",
+        "summary": "Be om passordreset. Samme svar for kjent og ukjent e-post.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PasswordResetRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Mottatt. Aldri skill kjente og ukjente adresser." }
+        }
+      }
+    },
+    "/auth/password-reset/complete": {
+      "post": {
+        "operationId": "completePasswordReset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PasswordResetComplete" }
+            }
+          }
+        },
+        "responses": {
+          "204": { "description": "Passord oppdatert; gamle sesjoner invalideres." },
+          "400": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "204": { "description": "Gjeldende refresh-token tilbakekalt." } }
+      }
+    },
+    "/auth/logout-all": {
+      "post": {
+        "operationId": "logoutAll",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "204": { "description": "Alle sesjoner tilbakekalt." } }
+      }
+    },
+    "/v2/me": {
+      "delete": {
+        "operationId": "deleteAccount",
+        "security": [{ "bearerAuth": [] }],
+        "summary": "Start kontosletting. Krever passord eller fersk innlogging.",
+        "responses": {
+          "202": {
+            "description": "Sletting startet.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountDeletionStatus" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/me/exports": {
+      "post": {
+        "operationId": "createExport",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExportStatus" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/me/products": {
+      "get": {
+        "operationId": "listMyProducts",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["recent", "frequent", "name"], "default": "recent" }
+          },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserProductList" },
+                "examples": {
+                  "empty": { "value": { "items": [], "next_cursor": null } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/me/products/{id}": {
+      "patch": {
+        "operationId": "patchMyProduct",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserProductPatch" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserProduct" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/me/products/{id}/merge": {
+      "post": {
+        "operationId": "mergeMyProducts",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ProductMergeRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserProduct" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/me/products/{id}/prices": {
+      "get": {
+        "operationId": "getMyProductPrices",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "include_conditional", "in": "query", "schema": { "type": "boolean", "default": false } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProductPriceResponse" },
+                "examples": {
+                  "oldAndNewer": {
+                    "externalValue": "./fixtures/old-and-newer-price.json"
+                  },
+                  "tied": { "externalValue": "./fixtures/tied-lowest.json" },
+                  "unknownDate": { "externalValue": "./fixtures/unknown-date.json" }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/me/stores": {
+      "get": {
+        "operationId": "listMyStores",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserStoreList" } }
+            }
+          }
+        }
+      }
+    },
+    "/v2/receipts/{id}/draft": {
+      "put": {
+        "operationId": "putReceiptDraft",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptDraftRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptRevision" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/receipts/{id}/confirm": {
+      "post": {
+        "operationId": "confirmReceiptV2",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptConfirmV2Request" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptRevision" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/receipts/{id}/revisions": {
+      "post": {
+        "operationId": "createReceiptRevision",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptConfirmV2Request" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptRevision" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists": {
+      "get": {
+        "operationId": "listShoppingLists",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListCollection" } }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createShoppingList",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListCreate" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}": {
+      "get": {
+        "operationId": "getShoppingList",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "patch": {
+        "operationId": "patchShoppingList",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListPatch" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}/items": {
+      "post": {
+        "operationId": "addShoppingListItem",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItemUpsert" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItem" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}/price-summary": {
+      "get": {
+        "operationId": "getShoppingListPriceSummary",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "include_conditional", "in": "query", "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ShoppingListPriceSummary" },
+                "examples": {
+                  "partial": { "externalValue": "./fixtures/shopping-list-price-summary.json" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sync": {
+      "post": {
+        "operationId": "syncShoppingLists",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/SyncRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SyncResponse" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "responses": {
+      "Error": {
+        "description": "Feilkontrakt uten OCR-tekst, tokens eller stacktrace.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "versionConflict": { "externalValue": "./fixtures/error-409-version.json" }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "DecimalString": {
+        "type": "string",
+        "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+        "description": "Penge- og mengdeverdier som desimalstreng. Aldri JSON-number."
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["code", "message", "retryable", "request_id"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "field_errors": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/FieldError" }
+          },
+          "retryable": { "type": "boolean" },
+          "request_id": { "type": "string" }
+        }
+      },
+      "FieldError": {
+        "type": "object",
+        "required": ["field", "code", "message"],
+        "properties": {
+          "field": { "type": "string" },
+          "code": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      },
+      "PasswordResetRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": { "email": { "type": "string", "format": "email" } }
+      },
+      "PasswordResetComplete": {
+        "type": "object",
+        "required": ["token", "new_password"],
+        "properties": {
+          "token": { "type": "string" },
+          "new_password": { "type": "string", "minLength": 8 }
+        }
+      },
+      "AccountDeletionStatus": {
+        "type": "object",
+        "required": ["status", "requested_at"],
+        "properties": {
+          "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "failed"] },
+          "requested_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ExportStatus": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["pending", "ready", "expired", "failed"] },
+          "download_url": { "type": ["string", "null"] },
+          "expires_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "UserProduct": {
+        "type": "object",
+        "required": ["id", "display_name", "identity_status", "version"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "display_name": { "type": "string" },
+          "brand": { "type": ["string", "null"] },
+          "variant": { "type": ["string", "null"] },
+          "pack_content": { "$ref": "#/components/schemas/DecimalString" },
+          "pack_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "pack_count": { "$ref": "#/components/schemas/DecimalString" },
+          "identity_status": { "type": "string", "enum": ["confirmed", "unresolved", "inherited"] },
+          "last_purchased_at": { "type": ["string", "null"], "format": "date" },
+          "purchase_count": { "type": "integer" },
+          "version": { "type": "integer" }
+        }
+      },
+      "UserProductList": {
+        "type": "object",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/UserProduct" } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "UserProductPatch": {
+        "type": "object",
+        "required": ["expected_version", "mutation_id"],
+        "properties": {
+          "expected_version": { "type": "integer" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "display_name": { "type": "string" },
+          "brand": { "type": ["string", "null"] },
+          "variant": { "type": ["string", "null"] },
+          "pack_content": { "$ref": "#/components/schemas/DecimalString" },
+          "pack_unit": { "type": "string" },
+          "identity_status": { "type": "string" }
+        }
+      },
+      "ProductMergeRequest": {
+        "type": "object",
+        "required": ["source_id", "source_version", "target_version", "mutation_id"],
+        "properties": {
+          "source_id": { "type": "string", "format": "uuid" },
+          "source_version": { "type": "integer" },
+          "target_version": { "type": "integer" },
+          "mutation_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "ProductPriceResponse": {
+        "type": "object",
+        "required": ["product_id", "currency", "price_basis", "historical_lowest", "latest_by_store", "eligible_store_count", "excluded_observation_count", "history"],
+        "properties": {
+          "product_id": { "type": "string", "format": "uuid" },
+          "currency": { "type": "string", "enum": ["NOK"] },
+          "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
+          "historical_lowest": { "type": ["object", "null"] },
+          "latest_by_store": { "type": "array", "items": { "type": "object" } },
+          "eligible_store_count": { "type": "integer" },
+          "excluded_observation_count": { "type": "integer" },
+          "history": { "type": "object" },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "UserStore": {
+        "type": "object",
+        "required": ["id", "display_name", "identity_level", "version"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "display_name": { "type": "string" },
+          "chain": { "type": ["string", "null"] },
+          "branch_name": { "type": ["string", "null"] },
+          "identity_level": { "type": "string", "enum": ["branch", "chain_only", "unknown"] },
+          "version": { "type": "integer" }
+        }
+      },
+      "UserStoreList": {
+        "type": "object",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/UserStore" } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "ReceiptLineInput": {
+        "type": "object",
+        "required": ["id", "raw_product_name", "quantity", "quantity_unit", "line_type"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "raw_product_name": { "type": "string" },
+          "user_product_id": { "type": ["string", "null"], "format": "uuid" },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "line_type": { "type": "string", "enum": ["product", "deposit", "fee", "discount", "return", "unknown"] },
+          "net_line_total": { "$ref": "#/components/schemas/DecimalString" },
+          "printed_unit_price": { "$ref": "#/components/schemas/DecimalString" },
+          "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
+          "condition": { "type": "string", "enum": ["none", "member", "multi_buy", "coupon", "unknown"] }
+        }
+      },
+      "ReceiptDraftRequest": {
+        "type": "object",
+        "required": ["expected_version", "mutation_id", "lines"],
+        "properties": {
+          "expected_version": { "type": "integer" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "store_id": { "type": ["string", "null"], "format": "uuid" },
+          "purchase_date": { "type": ["string", "null"], "format": "date" },
+          "purchase_time": { "type": ["string", "null"] },
+          "date_precision": { "type": "string", "enum": ["date", "datetime", "unknown"] },
+          "printed_total": { "$ref": "#/components/schemas/DecimalString" },
+          "lines": { "type": "array", "items": { "$ref": "#/components/schemas/ReceiptLineInput" } }
+        }
+      },
+      "ReceiptConfirmV2Request": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ReceiptDraftRequest" },
+          {
+            "type": "object",
+            "properties": {
+              "accept_reconciliation_gap": { "type": "boolean", "default": false }
+            }
+          }
+        ]
+      },
+      "ReceiptRevision": {
+        "type": "object",
+        "required": ["receipt_id", "revision", "status", "price_data_version"],
+        "properties": {
+          "receipt_id": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer" },
+          "status": { "type": "string" },
+          "price_data_version": { "type": "integer" },
+          "reconciliation": { "type": "object" }
+        }
+      },
+      "ShoppingList": {
+        "type": "object",
+        "required": ["id", "name", "status", "version", "items"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "archived"] },
+          "version": { "type": "integer" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingListItem" } }
+        }
+      },
+      "ShoppingListCollection": {
+        "type": "object",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingList" } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "ShoppingListCreate": {
+        "type": "object",
+        "required": ["name", "mutation_id"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "mutation_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "ShoppingListPatch": {
+        "type": "object",
+        "required": ["expected_version", "mutation_id"],
+        "properties": {
+          "expected_version": { "type": "integer" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "archived"] }
+        }
+      },
+      "ShoppingListItem": {
+        "type": "object",
+        "required": ["id", "quantity", "quantity_unit", "checked", "position", "version"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "user_product_id": { "type": ["string", "null"], "format": "uuid" },
+          "free_text": { "type": ["string", "null"] },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string" },
+          "checked": { "type": "boolean" },
+          "position": { "type": "integer" },
+          "version": { "type": "integer" },
+          "deleted": { "type": "boolean", "default": false }
+        }
+      },
+      "ShoppingListItemUpsert": {
+        "type": "object",
+        "required": ["mutation_id", "quantity", "quantity_unit"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "expected_version": { "type": "integer" },
+          "user_product_id": { "type": ["string", "null"], "format": "uuid" },
+          "free_text": { "type": ["string", "null"] },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string" },
+          "checked": { "type": "boolean" },
+          "position": { "type": "integer" }
+        }
+      },
+      "ShoppingListPriceSummary": {
+        "type": "object",
+        "required": ["list_id", "list_version", "price_data_version", "calculated_at", "policy_version", "lines"],
+        "properties": {
+          "list_id": { "type": "string", "format": "uuid" },
+          "list_version": { "type": "integer" },
+          "price_data_version": { "type": "integer" },
+          "calculated_at": { "type": "string", "format": "date-time" },
+          "policy_version": { "type": "string" },
+          "include_conditional": { "type": "boolean" },
+          "lines": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "SyncRequest": {
+        "type": "object",
+        "required": ["cursor", "mutations"],
+        "properties": {
+          "cursor": { "type": ["string", "null"] },
+          "mutations": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "SyncResponse": {
+        "type": "object",
+        "required": ["cursor", "price_data_version", "lists", "conflicts"],
+        "properties": {
+          "cursor": { "type": "string" },
+          "price_data_version": { "type": "integer" },
+          "full_snapshot": { "type": "boolean", "default": false },
+          "replaced_product_ids": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": { "type": "string", "format": "uuid" },
+                "to": { "type": "string", "format": "uuid" }
+              }
+            }
+          },
+          "lists": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingList" } },
+          "conflicts": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    }
+  }
+}
