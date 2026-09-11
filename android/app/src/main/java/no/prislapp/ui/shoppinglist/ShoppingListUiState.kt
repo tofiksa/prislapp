@@ -14,6 +14,7 @@ data class ShoppingListUiState(
     val pricesFetchedAtLabel: String? = null,
     val priceRefreshFailed: Boolean = false,
     val priceDetail: PriceDetailUi? = null,
+    val firstReceiptCtaCount: Int? = null,
 ) {
     val undoSnackbarOnSheet: Boolean
         get() = showAddSheet && pendingUndo is ShoppingListUndo.RestoreQuantity

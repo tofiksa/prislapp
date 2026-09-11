@@ -88,6 +88,24 @@ class ShoppingListViewModel @Inject constructor(
         _uiState.update { it.copy(showAddSheet = false) }
     }
 
+    fun applyFirstReceiptCta(confirmedLineCount: Int) {
+        val historical = _uiState.value.items.count { it.userProductId != null }
+        val cta = FirstReceiptCta.evaluate(confirmedLineCount, historical)
+        if (cta.shouldShow) {
+            _uiState.update { it.copy(firstReceiptCtaCount = cta.readyCount) }
+            refreshRecent()
+        }
+    }
+
+    fun acceptFirstReceiptCta() {
+        _uiState.update { it.copy(firstReceiptCtaCount = null, showAddSheet = true) }
+        refreshRecent()
+    }
+
+    fun dismissFirstReceiptCta() {
+        _uiState.update { it.copy(firstReceiptCtaCount = null) }
+    }
+
     fun addRecentProduct(productId: String) {
         viewModelScope.launch {
             writeMutex.withLock {
@@ -256,6 +274,7 @@ class ShoppingListViewModel @Inject constructor(
                             pendingUndo = previous.pendingUndo,
                             showAddSheet = previous.showAddSheet,
                             priceDetail = previous.priceDetail,
+                            firstReceiptCtaCount = previous.firstReceiptCtaCount,
                         )
                     }
                     val listId = mapped.listId ?: _uiState.value.listId
@@ -339,6 +358,7 @@ class ShoppingListViewModel @Inject constructor(
                 pendingUndo = previous.pendingUndo,
                 showAddSheet = previous.showAddSheet,
                 priceDetail = previous.priceDetail,
+                firstReceiptCtaCount = previous.firstReceiptCtaCount,
             )
         }
     }

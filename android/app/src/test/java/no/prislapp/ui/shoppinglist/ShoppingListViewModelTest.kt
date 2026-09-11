@@ -38,6 +38,61 @@ class ShoppingListViewModelTest {
     }
 
     @Test
+    fun firstReceiptCtaCatalogAddsThreeProductsByIdNeverFreeText() = runTest(dispatcher) {
+        val fixture = Fixture()
+        val products = (1..3).map { index ->
+            CachedUserProductEntity(
+                id = "p$index",
+                userId = "user-a",
+                displayName = "Vare $index",
+                packUnit = "each",
+            )
+        }
+        fixture.products.value = products
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+
+        vm.applyFirstReceiptCta(confirmedLineCount = 3)
+        assertEquals(3, vm.uiState.value.firstReceiptCtaCount)
+
+        vm.acceptFirstReceiptCta()
+        assertTrue(vm.uiState.value.showAddSheet)
+        assertNull(vm.uiState.value.firstReceiptCtaCount)
+
+        products.forEach { vm.addRecentProduct(it.id) }
+        advanceUntilIdle()
+
+        products.forEach { product ->
+            coVerify {
+                fixture.repo.addProductOrIncrement(
+                    listId = "list-1",
+                    userProductId = product.id,
+                    productDisplayName = product.displayName,
+                    quantity = BigDecimal.ONE,
+                    quantityUnit = "each",
+                )
+            }
+        }
+        coVerify(exactly = 0) { fixture.repo.addItem(any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun firstReceiptCtaHiddenWhenListAlreadyHasThreeHistoricalItems() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.items.value = listOf(
+            item(id = "h1", userProductId = "p1"),
+            item(id = "h2", userProductId = "p2"),
+            item(id = "h3", userProductId = "p3"),
+        )
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+
+        vm.applyFirstReceiptCta(confirmedLineCount = 5)
+        assertNull(vm.uiState.value.firstReceiptCtaCount)
+        assertFalse(vm.uiState.value.showAddSheet)
+    }
+
+    @Test
     fun emptyRepoCreatesDefaultListOnceAndRefreshDoesNotCreateAnother() = runTest(dispatcher) {
         val fixture = Fixture()
         coEvery { fixture.repo.createList(any()) } returns "list-1"

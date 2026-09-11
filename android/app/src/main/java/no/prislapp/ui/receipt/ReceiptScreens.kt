@@ -110,7 +110,7 @@ fun ReceiptProcessingScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReceiptReviewScreen(
-    onConfirmed: () -> Unit,
+    onConfirmed: (readyCount: Int) -> Unit,
     onBack: () -> Unit,
     viewModel: ReceiptReviewViewModel = hiltViewModel(),
 ) {
@@ -155,7 +155,7 @@ fun ReceiptReviewScreen(
             DatePicker(state = datePickerState)
         }
     }
-    LaunchedEffect(uiState.isDeleted) { if (uiState.isDeleted) onConfirmed() }
+    LaunchedEffect(uiState.isDeleted) { if (uiState.isDeleted) onConfirmed(0) }
     LaunchedEffect(uiState.status) {
         while (uiState.status == "UPLOADED" || uiState.status == "PROCESSING") {
             kotlinx.coroutines.delay(3_000)
@@ -165,7 +165,7 @@ fun ReceiptReviewScreen(
 
     LaunchedEffect(uiState.isConfirmed) {
         if (uiState.isConfirmed) {
-            onConfirmed()
+            onConfirmed(uiState.items.size)
         }
     }
 

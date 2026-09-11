@@ -112,7 +112,7 @@ class HistoryViewModel @Inject constructor(
                 val response = receiptRepository.listReceiptsFiltered(
                     page = if (append) state.page + 1 else 1,
                     storeId = state.selectedStoreId,
-                    status = "CONFIRMED",
+                    status = null,
                     fromDate = state.fromDate?.toStartOfDayIso(),
                     toDate = state.toDate?.toEndOfDayIso(),
                 )

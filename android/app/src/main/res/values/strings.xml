@@ -79,6 +79,11 @@
     <string name="nav_history">Historikk</string>
     <string name="nav_search">Søk</string>
     <string name="nav_shopping_list">Handleliste</string>
+    <string name="nav_products">Varer</string>
+    <string name="nav_receipts">Kvitteringer</string>
+    <string name="receipts_title">Kvitteringer</string>
+    <string name="first_receipt_cta_title">%1$d varer klare til neste handel</string>
+    <string name="first_receipt_cta_action">Lag handleliste</string>
     <string name="account_menu">Konto</string>
     <string name="processing_body_upload">Kvitteringen lastes opp. Du kan lukke denne skjermen — vi fortsetter i bakgrunnen.</string>
     <string name="processing_body_ocr">Vi henter butikk, dato og varer. Dette tar vanligvis under et minutt.</string>

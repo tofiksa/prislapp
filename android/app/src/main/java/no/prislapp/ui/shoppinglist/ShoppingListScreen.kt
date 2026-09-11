@@ -18,9 +18,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -62,11 +65,14 @@ import no.prislapp.ui.components.PrislappTopBar
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShoppingListScreen(
+    firstReceiptReadyCount: Int? = null,
+    onLogout: () -> Unit = {},
     viewModel: ShoppingListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listSnackbarHostState = remember { SnackbarHostState() }
     val sheetSnackbarHostState = remember { SnackbarHostState() }
+    var accountMenuExpanded by remember { mutableStateOf(false) }
     val undoMessage = when (uiState.pendingUndo) {
         is ShoppingListUndo.RestoreQuantity -> stringResource(R.string.shopping_list_quantity_updated)
         is ShoppingListUndo.Undelete -> stringResource(R.string.shopping_list_item_removed)
@@ -100,9 +106,36 @@ fun ShoppingListScreen(
         }
     }
 
+    LaunchedEffect(firstReceiptReadyCount) {
+        val count = firstReceiptReadyCount ?: return@LaunchedEffect
+        viewModel.applyFirstReceiptCta(count)
+    }
+
     Scaffold(
         topBar = {
-            PrislappTopBar(title = stringResource(R.string.shopping_list_title))
+            PrislappTopBar(
+                title = stringResource(R.string.shopping_list_title),
+                actions = {
+                    IconButton(onClick = { accountMenuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.account_menu),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = accountMenuExpanded,
+                        onDismissRequest = { accountMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.logout)) },
+                            onClick = {
+                                accountMenuExpanded = false
+                                onLogout()
+                            },
+                        )
+                    }
+                },
+            )
         },
         snackbarHost = { SnackbarHost(listSnackbarHostState) },
         floatingActionButton = {
@@ -127,6 +160,29 @@ fun ShoppingListScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
                 )
+            }
+            uiState.firstReceiptCtaCount?.let { readyCount ->
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = stringResource(R.string.first_receipt_cta_title, readyCount),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Button(
+                            onClick = viewModel::acceptFirstReceiptCta,
+                            modifier = Modifier
+                                .padding(top = 8.dp)
+                                .height(48.dp),
+                        ) {
+                            Text(stringResource(R.string.first_receipt_cta_action))
+                        }
+                    }
+                }
             }
             uiState.pricesFetchedAtLabel?.let { fetched ->
                 Text(

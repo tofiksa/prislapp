@@ -11,8 +11,10 @@ object Routes {
     const val PRODUCT_SEARCH = "product_search"
     const val PRODUCT_PRICES = "product_prices/{productId}"
     const val SHOPPING_LIST = "shopping_list"
+    const val RECEIPTS = "receipts"
+    const val LOGGED_IN_START = SHOPPING_LIST
 
-    val TAB_ROUTES = setOf(HOME, SHOPPING_LIST, HISTORY, PRODUCT_SEARCH)
+    val TAB_ROUTES = setOf(SHOPPING_LIST, PRODUCT_SEARCH, RECEIPTS)
 
     fun processing(localId: Long) = "processing/$localId"
     fun review(receiptId: String) = "review/$receiptId"

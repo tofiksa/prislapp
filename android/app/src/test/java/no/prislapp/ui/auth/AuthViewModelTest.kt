@@ -1,6 +1,7 @@
 package no.prislapp.ui.auth
 
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -13,6 +14,7 @@ import no.prislapp.data.repository.AuthRepository
 import no.prislapp.domain.model.User
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -28,6 +30,7 @@ class AuthViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         authRepository = mockk(relaxed = true)
+        every { authRepository.isLoggedIn } returns kotlinx.coroutines.flow.flowOf(false)
         googleSignInHelper = mockk(relaxed = true)
         viewModel = AuthViewModel(authRepository, googleSignInHelper)
     }
@@ -35,6 +38,25 @@ class AuthViewModelTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun startsResolvingUntilAuthFlowEmits() = runTest(testDispatcher) {
+        val repo = mockk<AuthRepository>(relaxed = true)
+        val isLoggedIn = kotlinx.coroutines.flow.MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
+        every { repo.isLoggedIn } returns isLoggedIn
+        val vm = AuthViewModel(repo, mockk(relaxed = true))
+
+        assertFalse(vm.uiState.value.isAuthResolved)
+        assertFalse(vm.uiState.value.isLoggedIn)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isAuthResolved)
+
+        isLoggedIn.emit(false)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isAuthResolved)
+        assertFalse(vm.uiState.value.isLoggedIn)
     }
 
     @Test

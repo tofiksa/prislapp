@@ -1,12 +1,14 @@
 package no.prislapp.ui.navigation
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -15,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -32,8 +35,7 @@ import no.prislapp.ui.auth.AuthViewModel
 import no.prislapp.ui.auth.LoginScreen
 import no.prislapp.ui.auth.RegisterScreen
 import no.prislapp.ui.camera.CameraScreen
-import no.prislapp.ui.history.HistoryScreen
-import no.prislapp.ui.home.HomeScreen
+import no.prislapp.ui.home.ReceiptsScreen
 import no.prislapp.ui.product.ProductPricesScreen
 import no.prislapp.ui.product.ProductSearchScreen
 import no.prislapp.ui.receipt.ReceiptProcessingScreen
@@ -57,9 +59,19 @@ fun PrislappNavHost(
     val tabRoutes = Routes.TAB_ROUTES
     val showBottomBar = currentRoute in tabRoutes
 
+    if (!uiState.isAuthResolved) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
     LaunchedEffect(uiState.isLoggedIn) {
         if (uiState.isLoggedIn) {
-            navController.navigate(Routes.HOME) {
+            navController.navigate(Routes.LOGGED_IN_START) {
                 popUpTo(navController.graph.id) { inclusive = true }
                 launchSingleTop = true
             }
@@ -84,7 +96,7 @@ fun PrislappNavHost(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Routes.LOGIN,
+            startDestination = if (uiState.isLoggedIn) Routes.LOGGED_IN_START else Routes.LOGIN,
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(Routes.LOGIN) {
@@ -101,8 +113,17 @@ fun PrislappNavHost(
                     onRegistered = {},
                 )
             }
-            composable(Routes.HOME) {
-                HomeScreen(
+            composable(Routes.SHOPPING_LIST) { entry ->
+                val ctaCount by entry.savedStateHandle
+                    .getStateFlow("firstReceiptReadyCount", 0)
+                    .collectAsStateWithLifecycle()
+                ShoppingListScreen(
+                    firstReceiptReadyCount = ctaCount.takeIf { it > 0 },
+                    onLogout = { authViewModel.logout() },
+                )
+            }
+            composable(Routes.RECEIPTS) {
+                ReceiptsScreen(
                     onCaptureReceipt = { navController.navigate(Routes.CAMERA) },
                     onOpenReceipt = { receiptId ->
                         navController.navigate(Routes.review(receiptId))
@@ -113,15 +134,10 @@ fun PrislappNavHost(
                     onLogout = { authViewModel.logout() },
                 )
             }
-            composable(Routes.SHOPPING_LIST) {
-                ShoppingListScreen()
-            }
             composable(Routes.CAMERA) {
                 CameraScreen(
                     onCaptured = { localId ->
-                        navController.navigate(Routes.processing(localId)) {
-                            popUpTo(Routes.HOME)
-                        }
+                        navController.navigate(Routes.processing(localId))
                     },
                     onBack = { navController.popBackStack() },
                 )
@@ -132,9 +148,7 @@ fun PrislappNavHost(
             ) {
                 ReceiptProcessingScreen(
                     onReadyForReview = { receiptId ->
-                        navController.navigate(Routes.review(receiptId)) {
-                            popUpTo(Routes.HOME)
-                        }
+                        navController.navigate(Routes.review(receiptId))
                     },
                     onBack = { navController.popBackStack() },
                 )
@@ -144,20 +158,18 @@ fun PrislappNavHost(
                 arguments = listOf(navArgument("receiptId") { type = NavType.StringType }),
             ) {
                 ReceiptReviewScreen(
-                    onConfirmed = {
-                        navController.navigate(Routes.HOME) {
-                            popUpTo(Routes.HOME) { inclusive = true }
+                    onConfirmed = { readyCount ->
+                        navController.navigate(Routes.SHOPPING_LIST) {
+                            popUpTo(Routes.SHOPPING_LIST) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                        runCatching {
+                            navController.getBackStackEntry(Routes.SHOPPING_LIST)
+                                .savedStateHandle["firstReceiptReadyCount"] = readyCount
                         }
                     },
                     onBack = { navController.popBackStack() },
-                )
-            }
-            composable(Routes.HISTORY) {
-                HistoryScreen(
-                    onOpenReceipt = { receiptId ->
-                        navController.navigate(Routes.review(receiptId))
-                    },
-                    onBack = null,
                 )
             }
             composable(Routes.PRODUCT_SEARCH) {
@@ -184,10 +196,9 @@ private fun LoggedInBottomBar(
     onNavigate: (String) -> Unit,
 ) {
     val tabs = listOf(
-        BottomTab(Routes.HOME, Icons.Default.Home, R.string.nav_home),
         BottomTab(Routes.SHOPPING_LIST, Icons.Default.ShoppingCart, R.string.nav_shopping_list),
-        BottomTab(Routes.HISTORY, Icons.AutoMirrored.Filled.ReceiptLong, R.string.nav_history),
-        BottomTab(Routes.PRODUCT_SEARCH, Icons.Default.Search, R.string.nav_search),
+        BottomTab(Routes.PRODUCT_SEARCH, Icons.Default.Search, R.string.nav_products),
+        BottomTab(Routes.RECEIPTS, Icons.AutoMirrored.Filled.ReceiptLong, R.string.nav_receipts),
     )
     NavigationBar {
         tabs.forEach { tab ->
@@ -203,7 +214,7 @@ private fun LoggedInBottomBar(
 
 private fun NavHostController.navigateToTab(route: String) {
     navigate(route) {
-        popUpTo(Routes.HOME) { saveState = true }
+        popUpTo(Routes.SHOPPING_LIST) { saveState = true }
         launchSingleTop = true
         restoreState = true
     }
