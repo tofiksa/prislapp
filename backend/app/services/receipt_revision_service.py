@@ -608,6 +608,8 @@ class ReceiptRevisionService:
                     line_type=line.line_type.value,
                     net_line_total=line.net_line_total,
                     printed_unit_price=line.printed_unit_price,
+                    # Prisgrunnlaget følger enheten, så det utledes her og
+                    # overtar ikke klientens verdi som fasit.
                     price_basis=qualification.result.price_basis.value,
                     condition=line.condition.value,
                     currency=COMPARISON_CURRENCY,
