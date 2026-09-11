@@ -4,6 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.errors import unauthenticated
 from app.security.jwt import decode_token
 from app.services.auth_service import AuthService
 from app.services.storage_service import StorageService
@@ -56,6 +57,25 @@ async def get_current_user_or_401(
             detail="Not authenticated",
         )
     return await _user_from_credentials(credentials, db)
+
+
+async def get_current_user_c00(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_security),
+    db: AsyncSession = Depends(get_db),
+):
+    """C00-auth for nye ruter. `/auth/me` beholder FastAPI `detail`."""
+    if credentials is None:
+        raise unauthenticated()
+    try:
+        payload = decode_token(credentials.credentials)
+    except ValueError as exc:
+        raise unauthenticated() from exc
+    if payload.get("type") != "access":
+        raise unauthenticated()
+    user = await AuthService(db).get_user_by_id(payload["sub"])
+    if not user:
+        raise unauthenticated()
+    return user
 
 
 async def check_postgres(db: AsyncSession) -> bool:

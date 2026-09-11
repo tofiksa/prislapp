@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.errors import ApiError
+from app.errors import ApiError, email_not_verified
 from app.models.auth_session import PasswordResetToken, RefreshSession
 from app.models.user import User
 from app.schemas.auth import TokenResponse
@@ -152,7 +152,9 @@ class AuthService:
         google_sub er identiteten. Lik e-posttekst alene gir aldri eierskap.
 
         - google_sub matcher → innlogging.
-        - e-post er ny → ny bruker.
+        - e-post er ny og email_verified er sann → ny bruker.
+        - e-post er ny og email_verified er usann → 401 EMAIL_NOT_VERIFIED,
+          ingen bruker rad.
         - e-post matcher en eksisterende bruker med annen/mangler google_sub →
           409 ACCOUNT_LINK_REQUIRED. Auto-link skjer ikke, heller ikke når
           email_verified er sann og kontoen allerede eier e-posten via passord.
@@ -163,9 +165,10 @@ class AuthService:
 
         existing = await self.get_user_by_email(email.lower())
         if existing:
-            # email_verified dokumenterer fremtidig eksplisitt linking, ikke P0-auto-link.
-            _ = email_verified
             raise _account_link_required()
+
+        if not email_verified:
+            raise email_not_verified()
 
         user = User(email=email.lower(), google_sub=google_sub)
         self.db.add(user)

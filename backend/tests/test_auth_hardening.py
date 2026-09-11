@@ -243,6 +243,33 @@ async def test_google_creates_an_account_for_a_new_email(
 
 
 @pytest.mark.asyncio
+async def test_google_unverified_email_does_not_create_a_user(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "app.routers.auth.verify_google_id_token",
+        lambda _token: {
+            "sub": "google-sub-unverified",
+            "email": "unverified-fresh@example.com",
+            "email_verified": False,
+        },
+    )
+
+    response = await client.post("/auth/google", json={"id_token": "fake-google-token"})
+    body = _assert_c00_error(response, status_code=401, code="EMAIL_NOT_VERIFIED")
+    assert "unverified-fresh@example.com" not in str(body)
+
+    user = (
+        await db_session.execute(
+            select(User).where(User.email == "unverified-fresh@example.com")
+        )
+    ).scalar_one_or_none()
+    assert user is None
+
+
+@pytest.mark.asyncio
 async def test_refresh_rotates_and_innocent_replay_returns_the_same_token(
     client: AsyncClient,
 ):
@@ -316,6 +343,32 @@ async def test_concurrent_refresh_replay_does_not_logout_the_user(client: AsyncC
         json={"refresh_token": first.json()["refresh_token"]},
     )
     assert follow.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_logout_without_bearer_is_c00(client: AsyncClient):
+    response = await client.post(
+        "/auth/logout",
+        json={"refresh_token": "not-a-real-refresh"},
+    )
+    body = _assert_c00_error(response, status_code=401, code="UNAUTHENTICATED")
+    assert "detail" not in body
+    assert "not-a-real-refresh" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_password_reset_complete_missing_password_is_c00_without_token(
+    client: AsyncClient,
+):
+    token = "super-secret-reset-token-value"
+    response = await client.post(
+        "/auth/password-reset/complete",
+        json={"token": token},
+    )
+    body = _assert_c00_error(response, status_code=400, code="VALIDATION_ERROR")
+    assert "detail" not in body
+    assert token not in response.text
+    assert token not in str(body)
 
 
 @pytest.mark.asyncio

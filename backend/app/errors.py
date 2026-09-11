@@ -10,6 +10,8 @@ import uuid
 from dataclasses import dataclass
 
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.responses import JSONResponse
 
 
@@ -57,6 +59,41 @@ def invalid_cursor() -> ApiError:
     )
 
 
+def unauthenticated() -> ApiError:
+    return ApiError(401, "UNAUTHENTICATED", "Du er ikke innlogget.")
+
+
+def email_not_verified() -> ApiError:
+    return ApiError(401, "EMAIL_NOT_VERIFIED", "E-postadressen er ikke bekreftet.")
+
+
+_RESET_VALIDATION_PATHS = frozenset(
+    {
+        "/auth/password-reset/request",
+        "/auth/password-reset/complete",
+    }
+)
+
+
+def api_error_from_request_validation(exc: RequestValidationError) -> ApiError:
+    """C00 for nye reset-ruter. `input`/`ctx` og tokens tas ikke med."""
+    field_errors: list[FieldError] = []
+    for error in exc.errors():
+        loc = [str(part) for part in error.get("loc", ()) if part != "body"]
+        field = ".".join(loc) if loc else "body"
+        error_type = str(error.get("type", "invalid"))
+        if error_type == "missing":
+            field_errors.append(FieldError(field, "required", "Feltet mangler."))
+        else:
+            field_errors.append(FieldError(field, "invalid", "Feltet er ugyldig."))
+    return ApiError(
+        400,
+        "VALIDATION_ERROR",
+        "Forespørselen er ugyldig.",
+        field_errors,
+    )
+
+
 def new_request_id() -> str:
     return f"req_{uuid.uuid4().hex}"
 
@@ -76,3 +113,12 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
             **exc.extra,
         },
     )
+
+
+async def request_validation_error_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    if request.url.path in _RESET_VALIDATION_PATHS:
+        return await api_error_handler(request, api_error_from_request_validation(exc))
+    return await request_validation_exception_handler(request, exc)
