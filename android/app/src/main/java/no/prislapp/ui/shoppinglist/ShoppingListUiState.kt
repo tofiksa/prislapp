@@ -11,6 +11,9 @@ data class ShoppingListUiState(
     val catalogOfflineEmpty: Boolean = false,
     val showAddSheet: Boolean = false,
     val pendingUndo: ShoppingListUndo? = null,
+    val pricesFetchedAtLabel: String? = null,
+    val priceRefreshFailed: Boolean = false,
+    val priceDetail: PriceDetailUi? = null,
 ) {
     val undoSnackbarOnSheet: Boolean
         get() = showAddSheet && pendingUndo is ShoppingListUndo.RestoreQuantity
@@ -27,6 +30,17 @@ data class ShoppingListItemUi(
     val noPriceHistory: Boolean,
     val userProductId: String?,
     val priceHistoryLabel: String? = if (noPriceHistory) "Ingen prishistorikk" else null,
+    val priceLabel: String? = null,
+    val priceContentDescription: String? = null,
+    val showPriceRetry: Boolean = false,
+)
+
+data class PriceDetailUi(
+    val itemId: String,
+    val title: String,
+    val lines: List<String>,
+    val disclaimer: String?,
+    val receiptId: String?,
 )
 
 data class RecentProductUi(

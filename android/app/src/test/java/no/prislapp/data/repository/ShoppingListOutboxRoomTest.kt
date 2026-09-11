@@ -95,7 +95,10 @@ class ShoppingListOutboxRoomTest {
             old.version = 3
         }
         val db = Room.databaseBuilder(context, PrislappDatabase::class.java, name)
-            .addMigrations(no.prislapp.di.DatabaseModule.MIGRATION_3_4)
+            .addMigrations(
+                no.prislapp.di.DatabaseModule.MIGRATION_3_4,
+                no.prislapp.di.DatabaseModule.MIGRATION_4_5,
+            )
             .allowMainThreadQueries()
             .build()
         try {

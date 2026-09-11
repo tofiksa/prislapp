@@ -9,11 +9,18 @@ import no.prislapp.data.local.entity.CachedUserProductEntity
 import no.prislapp.data.local.entity.ShoppingListEntity
 import no.prislapp.data.local.entity.ShoppingListItemEntity
 import no.prislapp.data.local.entity.SyncConflictEntity
+import no.prislapp.data.remote.dto.ShoppingListPriceSummaryDto
+import no.prislapp.data.remote.dto.ShoppingListPriceSummaryLineDto
+import no.prislapp.data.remote.dto.ShoppingListPriceSummaryLowestDto
 import no.prislapp.data.repository.AddItemResult
+import no.prislapp.data.repository.CachedPriceSummary
+import no.prislapp.data.repository.PriceSummaryRepository
 import no.prislapp.data.repository.ShoppingListRepository
 import org.junit.*
 import org.junit.Assert.*
+import java.io.IOException
 import java.math.BigDecimal
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ShoppingListViewModelTest {
@@ -34,7 +41,7 @@ class ShoppingListViewModelTest {
     fun emptyRepoCreatesDefaultListOnceAndRefreshDoesNotCreateAnother() = runTest(dispatcher) {
         val fixture = Fixture()
         coEvery { fixture.repo.createList(any()) } returns "list-1"
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
         coVerify(exactly = 1) { fixture.repo.createList("Handleliste") }
 
@@ -56,7 +63,7 @@ class ShoppingListViewModelTest {
             )
         }
         fixture.products.value = products
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
 
         products.forEach { vm.addRecentProduct(it.id) }
@@ -79,7 +86,7 @@ class ShoppingListViewModelTest {
     @Test
     fun freeTextLineHasNoPriceHistoryAndNullUserProductId() = runTest(dispatcher) {
         val fixture = Fixture()
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
 
         fixture.items.value = listOf(
@@ -97,7 +104,7 @@ class ShoppingListViewModelTest {
     @Test
     fun setItemCheckedDoesNotRequireNetworkOrSync() = runTest(dispatcher) {
         val fixture = Fixture()
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
 
         clearMocks(fixture.repo, answers = false, recordedCalls = true)
@@ -126,7 +133,7 @@ class ShoppingListViewModelTest {
             AddItemResult(itemId = "item-1", previousQuantity = null),
             AddItemResult(itemId = "item-1", previousQuantity = BigDecimal("1.000")),
         )
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
 
         vm.addRecentProduct("p-melk")
@@ -174,7 +181,7 @@ class ShoppingListViewModelTest {
             addCount++
             AddItemResult(itemId = "item-1", previousQuantity = previous)
         }
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
 
         vm.openAddSheet()
@@ -205,7 +212,7 @@ class ShoppingListViewModelTest {
     @Test
     fun deleteUndoDoesNotHostSnackbarOnSheet() = runTest(dispatcher) {
         val fixture = Fixture()
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
 
         vm.deleteItem("item-1")
@@ -227,7 +234,7 @@ class ShoppingListViewModelTest {
                 packUnit = "each",
             ),
         )
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
 
         vm.addRecentProduct("p-melk")
@@ -258,7 +265,7 @@ class ShoppingListViewModelTest {
     @Test
     fun checkedItemsAreSortedLastInUiState() = runTest(dispatcher) {
         val fixture = Fixture()
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
 
         fixture.items.value = listOf(
@@ -273,7 +280,7 @@ class ShoppingListViewModelTest {
     @Test
     fun conflictBannerShowsWhenConflictsArePresent() = runTest(dispatcher) {
         val fixture = Fixture()
-        val vm = ShoppingListViewModel(fixture.repo)
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
         advanceUntilIdle()
         assertFalse(vm.uiState.value.showConflictBanner)
 
@@ -291,12 +298,210 @@ class ShoppingListViewModelTest {
         assertTrue(vm.uiState.value.showConflictBanner)
     }
 
+    @Test
+    fun setCheckedStillCallsSetItemCheckedWhenPriceFetchThrows() = runTest(dispatcher) {
+        val fixture = Fixture()
+        coEvery { fixture.priceRepo.refresh(any()) } throws IOException("nett nede")
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+
+        fixture.items.value = listOf(item(id = "item-1", userProductId = "p1"))
+        advanceUntilIdle()
+        clearMocks(fixture.repo, answers = false, recordedCalls = true)
+
+        vm.setChecked("item-1", true)
+        advanceUntilIdle()
+
+        coVerify { fixture.repo.setItemChecked("list-1", "item-1", true) }
+        coVerify(exactly = 0) { fixture.repo.setItemChecked("list-1", "item-1", false) }
+    }
+
+    @Test
+    fun staleSummaryWithLowerContentRevisionDoesNotReplaceLinePrices() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity(contentRevision = 10))
+        fixture.items.value = listOf(item(id = "item-1", userProductId = "p1"))
+        coEvery { fixture.priceRepo.refresh(any()) } returnsMany listOf(
+            priceSummary(contentRevision = 10, lines = listOf(lowestLine("item-1", "24.90", storeCount = 2))),
+            priceSummary(contentRevision = 9, lines = listOf(lowestLine("item-1", "1.00", storeCount = 2))),
+        )
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+
+        val first = vm.uiState.value.items.single().priceLabel
+        assertNotNull(first)
+        assertTrue(first!!.contains("24,90"))
+        assertTrue(first.contains("Lavest registrert"))
+
+        vm.refreshPrices()
+        advanceUntilIdle()
+
+        val second = vm.uiState.value.items.single().priceLabel
+        assertEquals(first, second)
+        assertTrue(!second!!.contains("1,00"))
+        assertTrue(!second.contains("1.00"))
+    }
+
+    @Test
+    fun nullHistoricalLowestFormatsAsNoComparablePriceNeverZero() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        fixture.items.value = listOf(item(id = "item-1", userProductId = "p1"))
+        coEvery { fixture.priceRepo.refresh(any()) } returns priceSummary(
+            lines = listOf(
+                ShoppingListPriceSummaryLineDto(
+                    item_id = "item-1",
+                    product_id = "p1",
+                    quantity = "1.000",
+                    quantity_unit = "each",
+                    status = "no_comparable_price",
+                    reason = "never_observed",
+                    eligible_store_count = 0,
+                    historical_lowest = null,
+                ),
+            ),
+        )
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+
+        val label = vm.uiState.value.items.single().priceLabel
+        assertNotNull(label)
+        assertTrue(label!!.contains("Ingen sammenlignbar pris"))
+        assertTrue(label.contains("Aldri registrert"))
+        assertTrue(!label.contains("0,00"))
+        assertTrue(!label.contains("0.00"))
+        assertTrue(!label.contains("Lavest registrert"))
+    }
+
+    @Test
+    fun cachedSummaryShownWithFetchedAtAndFailedRefreshKeepsCacheAndErrorFlag() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        fixture.items.value = listOf(item(id = "item-1", userProductId = "p1"))
+        val cached = priceSummary(
+            lines = listOf(lowestLine("item-1", "24.90", storeCount = 2)),
+        )
+        coEvery { fixture.priceRepo.cached(any()) } returns CachedPriceSummary(
+            summary = cached,
+            fetchedAt = "2026-09-10T12:00:00Z",
+        )
+        coEvery { fixture.priceRepo.refresh(any()) } throws IOException("timeout")
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertEquals("Priser hentet 10.09.2026", state.pricesFetchedAtLabel)
+        assertTrue(state.priceRefreshFailed)
+        val label = state.items.single().priceLabel
+        assertNotNull(label)
+        assertTrue(label!!.contains("24,90"))
+        assertTrue(!label.contains("0,00"))
+    }
+
+    @Test
+    fun oneEligibleStoreUsesComparisonDisabledCopy() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        fixture.items.value = listOf(item(id = "item-1", userProductId = "p1"))
+        coEvery { fixture.priceRepo.refresh(any()) } returns priceSummary(
+            lines = listOf(lowestLine("item-1", "24.90", storeCount = 1, storeName = "Kiwi Grünerløkka")),
+        )
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+
+        val label = vm.uiState.value.items.single().priceLabel
+        assertNotNull(label)
+        assertTrue(label!!.contains("Registrert hos Kiwi Grünerløkka — ingen butikksammenligning ennå"))
+        assertTrue(!label.contains("Lavest registrert"))
+        assertTrue(label.contains("24,90"))
+    }
+
+    @Test
+    fun freeTextReasonMapsToNoPriceHistoryNeverZero() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        fixture.items.value = listOf(item(id = "ft-1", freeText = "Melk", userProductId = null))
+        coEvery { fixture.priceRepo.refresh(any()) } returns priceSummary(
+            lines = listOf(
+                ShoppingListPriceSummaryLineDto(
+                    item_id = "ft-1",
+                    free_text = "Melk",
+                    quantity = "1.000",
+                    quantity_unit = "each",
+                    status = "no_comparable_price",
+                    reason = "free_text_no_history",
+                    eligible_store_count = 0,
+                    historical_lowest = null,
+                ),
+            ),
+        )
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+
+        val row = vm.uiState.value.items.single()
+        assertTrue(row.noPriceHistory)
+        assertEquals("Ingen prishistorikk", row.priceHistoryLabel)
+        assertEquals("Ingen prishistorikk", row.priceLabel)
+        assertTrue(!row.priceLabel!!.contains("0,00"))
+        assertTrue(!row.priceLabel!!.contains("0.00"))
+    }
+
+    @Test
+    fun loadingWithoutCacheTimesOutToRetryCopy() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity())
+        fixture.items.value = listOf(item(id = "item-1", userProductId = "p1"))
+        coEvery { fixture.priceRepo.refresh(any()) } coAnswers {
+            delay(20_000)
+            priceSummary(lines = listOf(lowestLine("item-1", "24.90", storeCount = 2)))
+        }
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceTimeBy(1)
+        val loading = vm.uiState.value.items.single().priceLabel
+        assertEquals("Henter pris…", loading)
+        assertTrue(!vm.uiState.value.items.single().showPriceRetry)
+
+        advanceTimeBy(ShoppingListViewModel.PRICE_FETCH_TIMEOUT_MS)
+        advanceUntilIdle()
+
+        val failed = vm.uiState.value.items.single()
+        assertEquals("Kunne ikke hente pris", failed.priceLabel)
+        assertTrue(failed.showPriceRetry)
+        assertTrue(!failed.priceLabel!!.contains("0,00"))
+    }
+
+    @Test
+    fun localItemChangeHidesStaleLinePriceUntilContentRevisionMatches() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.lists.value = listOf(listEntity(contentRevision = 3))
+        fixture.items.value = listOf(item(id = "item-1", userProductId = "p1"))
+        coEvery { fixture.priceRepo.refresh(any()) } returns priceSummary(
+            contentRevision = 3,
+            lines = listOf(lowestLine("item-1", "24.90", storeCount = 2)),
+        )
+        val vm = ShoppingListViewModel(fixture.repo, fixture.priceRepo)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.items.single().priceLabel!!.contains("24,90"))
+
+        fixture.items.value = listOf(
+            item(id = "item-1", userProductId = "p1"),
+            item(id = "item-2", freeText = "Brød"),
+        )
+        advanceUntilIdle()
+
+        val labels = vm.uiState.value.items.associate { it.id to it.priceLabel }
+        assertEquals("Pris oppdateres etter synkronisering", labels["item-1"])
+        assertEquals("Pris oppdateres etter synkronisering", labels["item-2"])
+        assertTrue(labels.values.none { it!!.contains("24,90") })
+    }
+
     private class Fixture {
         val lists = MutableStateFlow<List<ShoppingListEntity>>(emptyList())
         val items = MutableStateFlow<List<ShoppingListItemEntity>>(emptyList())
         val conflicts = MutableStateFlow<List<SyncConflictEntity>>(emptyList())
         val products = MutableStateFlow<List<CachedUserProductEntity>>(emptyList())
         val repo = mockk<ShoppingListRepository>()
+        val priceRepo = mockk<PriceSummaryRepository>()
 
         init {
             every { repo.observeLists() } returns lists
@@ -323,6 +528,8 @@ class ShoppingListViewModelTest {
             coEvery { repo.setItemQuantity(any(), any(), any()) } just Runs
             coEvery { repo.setItemDeleted(any(), any(), any()) } just Runs
             coEvery { repo.syncPending() } just Runs
+            coEvery { priceRepo.cached(any()) } returns null
+            coEvery { priceRepo.refresh(any()) } returns priceSummary(lines = emptyList())
         }
     }
 
@@ -343,4 +550,55 @@ class ShoppingListViewModelTest {
         checked = checked,
         position = position,
     )
+
+    private fun listEntity(contentRevision: Int = 0) = ShoppingListEntity(
+        id = "list-1",
+        userId = "user-a",
+        name = "Handleliste",
+        contentRevision = contentRevision,
+        createdAt = "2026-01-01T00:00:00Z",
+        updatedAt = "2026-01-01T00:00:00Z",
+    )
 }
+
+private fun priceSummary(
+    contentRevision: Int = 0,
+    listVersion: Int = 1,
+    priceDataVersion: Int = 1,
+    calculatedAt: String = "2026-09-11T07:00:00Z",
+    lines: List<ShoppingListPriceSummaryLineDto>,
+) = ShoppingListPriceSummaryDto(
+    list_id = "list-1",
+    list_version = listVersion,
+    content_revision = contentRevision,
+    price_data_version = priceDataVersion,
+    calculated_at = calculatedAt,
+    policy_version = "p0-2026-09-11",
+    include_conditional = false,
+    lines = lines,
+)
+
+private fun lowestLine(
+    itemId: String,
+    amount: String,
+    storeCount: Int,
+    storeName: String = "Rema 1000 Majorstuen",
+) = ShoppingListPriceSummaryLineDto(
+    item_id = itemId,
+    product_id = "p1",
+    quantity = "1.000",
+    quantity_unit = "each",
+    status = "historical_lowest",
+    reason = null,
+    eligible_store_count = storeCount,
+    historical_lowest = ShoppingListPriceSummaryLowestDto(
+        amount = amount,
+        store_id = "store-1",
+        store_name = storeName,
+        identity_level = "branch",
+        purchase_date = "2026-09-08",
+        age_label = "registrert nylig",
+        price_basis = "per_package",
+        disclaimer = "Dagens pris kan være annerledes",
+    ),
+)

@@ -25,6 +25,7 @@ class QueueDatabaseTest {
                 no.prislapp.di.DatabaseModule.MIGRATION_1_2,
                 no.prislapp.di.DatabaseModule.MIGRATION_2_3,
                 no.prislapp.di.DatabaseModule.MIGRATION_3_4,
+                no.prislapp.di.DatabaseModule.MIGRATION_4_5,
             ).build()
         try {
             assertTrue(db.pendingReceiptDao().observeAll("new-user").first().isEmpty())
@@ -44,6 +45,7 @@ class QueueDatabaseTest {
             .addMigrations(
                 no.prislapp.di.DatabaseModule.MIGRATION_2_3,
                 no.prislapp.di.DatabaseModule.MIGRATION_3_4,
+                no.prislapp.di.DatabaseModule.MIGRATION_4_5,
             ).build()
         try {
             assertEquals("/keep.jpg", db.pendingReceiptDao().getById(1)?.imagePath)

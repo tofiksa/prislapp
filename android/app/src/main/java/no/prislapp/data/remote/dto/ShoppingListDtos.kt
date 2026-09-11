@@ -107,3 +107,46 @@ data class SyncResponseDto(
     val lists: List<ShoppingListDto> = emptyList(),
     val conflicts: List<SyncConflictDto> = emptyList(),
 )
+
+data class ShoppingListPriceSummaryDto(
+    val list_id: String,
+    val list_version: Int,
+    val content_revision: Int,
+    val price_data_version: Int,
+    val calculated_at: String,
+    val policy_version: String,
+    val include_conditional: Boolean = false,
+    val lines: List<ShoppingListPriceSummaryLineDto> = emptyList(),
+)
+
+data class ShoppingListPriceSummaryLineDto(
+    val item_id: String,
+    val product_id: String? = null,
+    val free_text: String? = null,
+    val quantity: String,
+    val quantity_unit: String,
+    val status: String,
+    val reason: String? = null,
+    val eligible_store_count: Int,
+    val historical_lowest: ShoppingListPriceSummaryLowestDto? = null,
+)
+
+data class ShoppingListPriceSummaryLowestDto(
+    val amount: String,
+    val store_id: String,
+    val store_name: String,
+    val identity_level: String,
+    val purchase_date: String,
+    val age_label: String,
+    val price_basis: String,
+    val disclaimer: String,
+    val receipt_id: String? = null,
+    val tied_stores: List<PriceSummaryTiedStoreDto> = emptyList(),
+)
+
+data class PriceSummaryTiedStoreDto(
+    val store_id: String,
+    val store_name: String,
+    val identity_level: String,
+    val purchase_date: String,
+)

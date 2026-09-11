@@ -107,4 +107,9 @@
     <string name="shopping_list_increase_quantity">Øk mengde</string>
     <string name="shopping_list_decrease_quantity">Reduser mengde</string>
     <string name="shopping_list_remove">Fjern</string>
+    <string name="shopping_list_price_retry">Prøv igjen</string>
+    <string name="shopping_list_price_detail_title">Prisopplysninger</string>
+    <string name="shopping_list_price_receipt">Kvittering %1$s</string>
+    <string name="shopping_list_price_refresh_failed">Kunne ikke oppdatere prisene. Sist hentede priser vises.</string>
+    <string name="shopping_list_close_price_detail">Lukk prisopplysninger</string>
 </resources>

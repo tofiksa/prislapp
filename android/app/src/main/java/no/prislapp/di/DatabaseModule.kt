@@ -18,6 +18,7 @@ import no.prislapp.data.local.TransactionRunner
 import no.prislapp.data.local.dao.CachedUserProductDao
 import no.prislapp.data.local.dao.MutationOutboxDao
 import no.prislapp.data.local.dao.PendingReceiptDao
+import no.prislapp.data.local.dao.PriceSummaryCacheDao
 import no.prislapp.data.local.dao.ShoppingListDao
 import no.prislapp.data.local.dao.ShoppingListItemDao
 import no.prislapp.data.local.dao.SyncConflictDao
@@ -141,6 +142,29 @@ object DatabaseModule {
         }
     }
 
+    val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `price_summary_cache` (
+                    `listId` TEXT NOT NULL,
+                    `userId` TEXT NOT NULL,
+                    `payloadJson` TEXT NOT NULL,
+                    `listVersion` INTEGER NOT NULL,
+                    `contentRevision` INTEGER NOT NULL,
+                    `priceDataVersion` INTEGER NOT NULL,
+                    `calculatedAt` TEXT NOT NULL,
+                    `fetchedAt` TEXT NOT NULL,
+                    PRIMARY KEY(`listId`, `userId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_price_summary_cache_userId` ON `price_summary_cache` (`userId`)",
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): PrislappDatabase {
@@ -148,7 +172,7 @@ object DatabaseModule {
             context,
             PrislappDatabase::class.java,
             "prislapp.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
     }
 
     @Provides
@@ -176,6 +200,10 @@ object DatabaseModule {
     @Provides
     fun provideCachedUserProductDao(database: PrislappDatabase): CachedUserProductDao =
         database.cachedUserProductDao()
+
+    @Provides
+    fun providePriceSummaryCacheDao(database: PrislappDatabase): PriceSummaryCacheDao =
+        database.priceSummaryCacheDao()
 
     @Provides
     fun provideTransactionRunner(database: PrislappDatabase): TransactionRunner {

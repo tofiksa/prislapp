@@ -16,6 +16,7 @@ import no.prislapp.data.remote.dto.ShoppingListItemDto
 import no.prislapp.data.remote.dto.ShoppingListItemPatchRequest
 import no.prislapp.data.remote.dto.ShoppingListItemUpsertRequest
 import no.prislapp.data.remote.dto.ShoppingListPatchRequest
+import no.prislapp.data.remote.dto.ShoppingListPriceSummaryDto
 import no.prislapp.data.remote.dto.StoreListResponse
 import no.prislapp.data.remote.dto.SyncRequestDto
 import no.prislapp.data.remote.dto.SyncResponseDto
@@ -121,6 +122,13 @@ interface PrislappApi {
         @Path("id") id: String,
         @Header("X-Local-User") userId: String,
     ): ShoppingListDto
+
+    @GET("v2/shopping-lists/{id}/price-summary")
+    suspend fun getShoppingListPriceSummary(
+        @Path("id") id: String,
+        @Query("include_conditional") includeConditional: Boolean = false,
+        @Header("X-Local-User") userId: String,
+    ): ShoppingListPriceSummaryDto
 
     @PATCH("v2/shopping-lists/{id}")
     suspend fun patchShoppingList(

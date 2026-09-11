@@ -1,5 +1,6 @@
 package no.prislapp.ui.shoppinglist
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -125,6 +128,28 @@ fun ShoppingListScreen(
                     modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
                 )
             }
+            uiState.pricesFetchedAtLabel?.let { fetched ->
+                Text(
+                    text = fetched,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            if (uiState.priceRefreshFailed) {
+                Text(
+                    text = stringResource(R.string.shopping_list_price_refresh_failed),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                TextButton(
+                    onClick = viewModel::refreshPrices,
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text(stringResource(R.string.shopping_list_price_retry))
+                }
+            }
             if (uiState.items.isEmpty()) {
                 EmptyState(
                     title = stringResource(R.string.shopping_list_empty_title),
@@ -143,6 +168,8 @@ fun ShoppingListScreen(
                             onIncrement = { viewModel.incrementQuantity(item.id) },
                             onDecrement = { viewModel.decrementQuantity(item.id) },
                             onDelete = { viewModel.deleteItem(item.id) },
+                            onPriceClick = { viewModel.openPriceDetail(item.id) },
+                            onRetryPrice = viewModel::refreshPrices,
                         )
                     }
                 }
@@ -160,6 +187,13 @@ fun ShoppingListScreen(
             onDismiss = viewModel::dismissAddSheet,
         )
     }
+
+    uiState.priceDetail?.let { detail ->
+        PriceDetailSheet(
+            detail = detail,
+            onDismiss = viewModel::dismissPriceDetail,
+        )
+    }
 }
 
 @Composable
@@ -169,6 +203,8 @@ private fun ShoppingListItemRow(
     onIncrement: () -> Unit,
     onDecrement: () -> Unit,
     onDelete: () -> Unit,
+    onPriceClick: () -> Unit,
+    onRetryPrice: () -> Unit,
 ) {
     val checkedDescription = if (item.checked) {
         stringResource(R.string.shopping_list_checked)
@@ -199,21 +235,34 @@ private fun ShoppingListItemRow(
                         MaterialTheme.colorScheme.onSurface
                     },
                 )
-                val details = listOfNotNull(
-                    item.packLabel,
-                    item.quantityLabel,
-                    if (item.noPriceHistory) {
-                        stringResource(R.string.shopping_list_no_price_history)
-                    } else {
-                        null
-                    },
-                ).joinToString(" · ")
+                val details = listOfNotNull(item.packLabel, item.quantityLabel).joinToString(" · ")
                 if (details.isNotBlank()) {
                     Text(
                         text = details,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                item.priceLabel?.let { price ->
+                    val priceDescription = item.priceContentDescription ?: price
+                    Text(
+                        text = price,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clickable(onClick = onPriceClick)
+                            .semantics { contentDescription = priceDescription },
+                    )
+                }
+                if (item.showPriceRetry) {
+                    TextButton(
+                        onClick = onRetryPrice,
+                        modifier = Modifier.height(48.dp),
+                    ) {
+                        Text(stringResource(R.string.shopping_list_price_retry))
+                    }
                 }
             }
             IconButton(
@@ -369,6 +418,76 @@ private fun AddItemSheet(
                     hostState = host,
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PriceDetailSheet(
+    detail: PriceDetailUi,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.shopping_list_price_detail_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = detail.title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            if (detail.lines.isEmpty()) {
+                Text(
+                    text = PriceSummaryCopy.NO_COMPARABLE,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            } else {
+                detail.lines.forEach { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
+            detail.disclaimer?.let { disclaimer ->
+                Text(
+                    text = disclaimer,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+            detail.receiptId?.let { receiptId ->
+                Text(
+                    text = stringResource(R.string.shopping_list_price_receipt, receiptId),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .padding(top = 16.dp)
+                    .height(48.dp),
+            ) {
+                Text(stringResource(R.string.shopping_list_close_price_detail))
             }
         }
     }
