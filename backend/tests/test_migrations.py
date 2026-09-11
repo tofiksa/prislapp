@@ -41,9 +41,13 @@ def test_every_migration_script_is_declared_for_detection():
 
 
 def test_data_only_revisions_after_the_stamped_one_are_reapplied():
+    assert run_migrations.reapplied_data_revisions("003") == ("004",)
+
+
+def test_no_data_revision_is_reapplied_when_the_newest_schema_is_stamped():
     newest_schema_revision = run_migrations.SCHEMA_REVISIONS[-1].revision
 
-    assert run_migrations.reapplied_data_revisions(newest_schema_revision) == ("004",)
+    assert run_migrations.reapplied_data_revisions(newest_schema_revision) == ()
 
 
 @pytest.mark.asyncio

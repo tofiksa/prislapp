@@ -5,7 +5,8 @@ from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 
 from app.database import engine
-from app.routers import auth, health, products, receipts, stores
+from app.errors import ApiError, api_error_handler
+from app.routers import auth, health, me_v2, products, receipts, stores
 from app.services.storage_service import StorageService
 
 
@@ -20,11 +21,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Prislapp API", version="0.1.0", lifespan=lifespan)
+app.add_exception_handler(ApiError, api_error_handler)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(receipts.router)
 app.include_router(products.router)
 app.include_router(stores.router)
+app.include_router(me_v2.router)
 
 
 @app.get("/")
