@@ -525,6 +525,45 @@ async def test_free_text_and_products_on_the_same_list_each_get_a_status(
     assert "0.00" not in json.dumps([line["historical_lowest"] for line in lines[1:]])
 
 
+async def test_the_same_product_on_two_lines_is_priced_on_both(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """To linjer med samme vare er to linjer, og ingen av dem mister prisen."""
+    owner, headers = await _register(client, db_session, "owner@example.com")
+    store = await _store(db_session, owner)
+    product = await _product(db_session, owner)
+    await _confirm(
+        client,
+        db_session,
+        owner,
+        headers,
+        store=store,
+        lines=[_line(product, "24.90")],
+        purchase_date=_days_ago(3),
+    )
+
+    list_id = await _new_list(client, headers)
+    await _add_item(client, headers, list_id, user_product_id=str(product.id), position=0)
+    await _add_item(
+        client,
+        headers,
+        list_id,
+        user_product_id=str(product.id),
+        quantity="2",
+        position=1,
+    )
+
+    lines = (await _summary(client, headers, list_id)).json()["lines"]
+    items = (await client.get(f"/v2/shopping-lists/{list_id}", headers=headers)).json()["items"]
+
+    assert len(lines) == 2
+    assert [line["historical_lowest"]["amount"] for line in lines] == ["24.90", "24.90"]
+    # Mengden skrives som på listeruten. To utgaver av samme tall ville vært to tall.
+    assert [line["quantity"] for line in lines] == [item["quantity"] for item in items]
+    assert [line["quantity"] for line in lines] == ["1.000", "2.000"]
+
+
 async def test_the_response_carries_every_field_the_contract_promises(
     client: AsyncClient,
     db_session: AsyncSession,

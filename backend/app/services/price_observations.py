@@ -46,12 +46,12 @@ def line_reasons(
 
 
 def ranking_reasons(
-    line_reasons: tuple[str, ...],
+    own_reasons: tuple[str, ...],
     purchase_date,
     date_precision: str,
     store_identity: str | None,
 ) -> tuple[str, ...]:
-    reasons = [reason for reason in line_reasons if reason != UNKNOWN_DATE]
+    reasons = [reason for reason in own_reasons if reason != UNKNOWN_DATE]
     if purchase_date is None or date_precision == DatePrecision.UNKNOWN.value:
         reasons.append(UNKNOWN_DATE)
     if store_identity != BRANCH_IDENTITY:

@@ -93,7 +93,11 @@ class ShoppingListPriceSummaryService:
         shopping_list = await self._list_row(user_id, list_id)
         items = await self._items(shopping_list.id)
 
-        product_ids = [item.user_product_id for item in items if item.user_product_id]
+        # Samme vare kan stå på to linjer. Oppslaget gjøres én gang per vare, og
+        # begge linjene leser det samme grunnlaget.
+        product_ids = list(
+            dict.fromkeys(item.user_product_id for item in items if item.user_product_id),
+        )
         observations = await PriceObservationLoader(self.db).observations(
             user_id,
             product_ids,
