@@ -1,12 +1,13 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, Time, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.domain.pricing import DatePrecision, DateSource
 
 
 class ReceiptStatus(str, enum.Enum):
@@ -29,6 +30,18 @@ class Receipt(Base):
     purchase_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+    # Lest klokkeslett bevares for seg. Dato uten klokkeslett blir aldri midnatt.
+    purchase_time: Mapped[time | None] = mapped_column(Time(), nullable=True)
+    date_precision: Mapped[str] = mapped_column(
+        String(16),
+        default=DatePrecision.UNKNOWN.value,
+        server_default=DatePrecision.UNKNOWN.value,
+    )
+    date_source: Mapped[str] = mapped_column(
+        String(16),
+        default=DateSource.UNKNOWN.value,
+        server_default=DateSource.UNKNOWN.value,
     )
     total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=ReceiptStatus.UPLOADED.value)

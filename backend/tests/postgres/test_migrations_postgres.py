@@ -79,6 +79,8 @@ def test_fresh_database_migrates_to_head_with_schema_matching_models(postgres_ur
         ("002", None, None),
         ("003", "50.00", "25.00"),
         ("004", "25.00", "25.00"),
+        # 005 legger ingen tabell i 006, så stampingen må verifisere kolonnene.
+        ("005", "25.00", "25.00"),
     ],
 )
 def test_upgrade_from_stamped_revision_keeps_users_and_receipts(

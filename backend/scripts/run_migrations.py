@@ -141,6 +141,21 @@ SCHEMA_REVISIONS: tuple[SchemaRevision, ...] = (
             ),
         },
     ),
+    # 006 oppretter ingen tabell. Bare de nye kolonnene beviser revisjonen.
+    SchemaRevision(
+        "006",
+        {
+            "receipts": ("purchase_time", "date_precision", "date_source"),
+            "receipt_items": (
+                "line_type",
+                "net_line_total",
+                "printed_unit_price",
+                "quantity_unit",
+                "price_basis",
+                "condition",
+            ),
+        },
+    ),
 )
 
 # Datamigreringer etterlater ingen skjemaspor. De kjøres på nytt etter stamping,
@@ -167,10 +182,26 @@ def reapplied_data_revisions(revision: str) -> tuple[str, ...]:
     return tuple(candidate for candidate in later if candidate in DATA_ONLY_REVISIONS)
 
 
+def _introduced_tables(revision: SchemaRevision) -> frozenset[str]:
+    """Tabellene revisjonen oppretter selv.
+
+    En revisjon som bare legger til kolonner arver tabellen fra en tidligere
+    revisjon. Da er tabellnærvær ingen indikasjon, og bare kolonnene teller.
+    """
+    earlier: set[str] = set()
+    for candidate in SCHEMA_REVISIONS:
+        if candidate.revision == revision.revision:
+            return frozenset(revision.tables.keys() - earlier)
+        earlier |= set(candidate.tables)
+    return frozenset(revision.tables)
+
+
 def _schema_objects(revision: SchemaRevision) -> list[str]:
+    introduced = _introduced_tables(revision)
     objects: list[str] = []
     for table, columns in revision.tables.items():
-        objects.append(table)
+        if table in introduced:
+            objects.append(table)
         objects.extend(f"{table}.{column}" for column in columns)
     return objects
 
@@ -194,13 +225,16 @@ async def _alembic_revision() -> str | None:
 
 
 async def _missing_schema_objects(revision: SchemaRevision) -> list[str]:
+    introduced = _introduced_tables(revision)
+
     def collect(connection) -> list[str]:
         inspector = inspect(connection)
         existing_tables = set(inspector.get_table_names())
         missing: list[str] = []
         for table, columns in revision.tables.items():
             if table not in existing_tables:
-                missing.append(table)
+                if table in introduced:
+                    missing.append(table)
                 missing.extend(f"{table}.{column}" for column in columns)
                 continue
             existing_columns = {column["name"] for column in inspector.get_columns(table)}

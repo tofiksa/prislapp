@@ -79,8 +79,8 @@ def _seed_confirmed_receipt(database: Path) -> dict[str, str]:
     return ids
 
 
-def test_005_is_head_and_declared_for_schema_verification():
-    assert run_migrations.migration_revisions()[-1] == "005"
+def test_005_is_declared_for_schema_verification():
+    assert "005" in run_migrations.migration_revisions()
     declared = {revision.revision for revision in run_migrations.SCHEMA_REVISIONS}
     assert "005" in declared
 
