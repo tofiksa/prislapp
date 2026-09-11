@@ -18,6 +18,7 @@ import no.prislapp.data.remote.dto.ReceiptConfirmRequest
 import no.prislapp.data.remote.dto.ReceiptDetailResponse
 import no.prislapp.data.remote.dto.ReceiptListResponse
 import no.prislapp.data.remote.dto.ReceiptUploadResponse
+import no.prislapp.data.receipt.ReceiptImageFormat
 import no.prislapp.data.remote.dto.StoreListResponse
 import no.prislapp.worker.ReceiptPollWorker
 import no.prislapp.worker.ReceiptUploadWorker
@@ -127,7 +128,13 @@ class ReceiptRepository @Inject constructor(
             entity.copy(status = PendingReceiptEntity.STATUS_UPLOADING, lastErrorCode = null),
         )
 
-        val requestBody = file.asRequestBody("image/jpeg".toMediaType())
+        val header = file.inputStream().use { stream ->
+            val buffer = ByteArray(16)
+            val read = stream.read(buffer)
+            if (read <= 0) byteArrayOf() else buffer.copyOf(read)
+        }
+        val mime = ReceiptImageFormat.mimeFromMagic(header) ?: ReceiptImageFormat.MIME_JPEG
+        val requestBody = file.asRequestBody(mime.toMediaType())
         val part = MultipartBody.Part.createFormData("file", file.name, requestBody)
         val response = try {
             api.uploadReceipt(part, entity.captureId, entity.userId)

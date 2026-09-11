@@ -17,8 +17,14 @@
     <string name="home_title">Prislapp</string>
     <string name="camera_title">Kvitteringskamera</string>
     <string name="camera_permission">Gi kameratilgang</string>
+    <string name="camera_permission_denied_gallery_ok">Kameratilgang mangler. Du kan likevel velge et bilde fra galleriet.</string>
     <string name="capture_button">Ta bilde</string>
     <string name="pick_from_gallery">Velg fra galleri</string>
+    <string name="receipt_preview_use_image">Bruk bilde</string>
+    <string name="receipt_preview_retake">Ta på nytt</string>
+    <string name="receipt_preview_rotate">Roter 90 grader</string>
+    <string name="receipt_preview_zoom">Kvitteringsbilde. Knip for å zoome.</string>
+    <string name="receipt_image_unsupported_format">Dette filformatet støttes ikke. Bruk et JPEG- eller PNG-bilde fra galleriet.</string>
     <string name="processing_title">Leser kvitteringen</string>
     <string name="review_title">Gjennomgå kvittering</string>
     <string name="unknown_store">Ukjent butikk</string>
