@@ -98,6 +98,63 @@ class ReceiptImageFormatTest {
         }
     }
 
+    @Test
+    fun exifOrientationSixIsBakedIntoUprightPixelsEvenAtZeroUserRotation() {
+        val file = java.io.File.createTempFile("exif6", ".jpg")
+        try {
+            val source = Bitmap.createBitmap(16, 8, Bitmap.Config.ARGB_8888)
+            for (x in 0 until 16) {
+                for (y in 0 until 8) {
+                    source.setPixel(x, y, if (x < 8) android.graphics.Color.RED else android.graphics.Color.BLUE)
+                }
+            }
+            file.outputStream().use { check(source.compress(Bitmap.CompressFormat.JPEG, 100, it)) }
+            android.media.ExifInterface(file.absolutePath).apply {
+                setAttribute(
+                    android.media.ExifInterface.TAG_ORIENTATION,
+                    android.media.ExifInterface.ORIENTATION_ROTATE_90.toString(),
+                )
+                saveAttributes()
+            }
+
+            val raw = android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+            assertEquals(16, raw.width)
+            assertEquals(8, raw.height)
+
+            rotateReceiptImageIfNeeded(file, 0)
+
+            val baked = android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+            assertEquals(8, baked.width)
+            assertEquals(16, baked.height)
+            assertEquals(
+                android.media.ExifInterface.ORIENTATION_NORMAL,
+                android.media.ExifInterface(file.absolutePath).getAttributeInt(
+                    android.media.ExifInterface.TAG_ORIENTATION,
+                    android.media.ExifInterface.ORIENTATION_UNDEFINED,
+                ),
+            )
+            assertTrue(isMostlyRed(baked, left = 0, top = 0, right = baked.width, bottom = baked.height / 2))
+            assertTrue(isMostlyBlue(baked, left = 0, top = baked.height / 2, right = baked.width, bottom = baked.height))
+
+            val uprightWidth = baked.width
+            val uprightHeight = baked.height
+            rotateReceiptImageIfNeeded(file, 90)
+
+            val plus90 = android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+            assertEquals(uprightHeight, plus90.width)
+            assertEquals(uprightWidth, plus90.height)
+            assertEquals(
+                android.media.ExifInterface.ORIENTATION_NORMAL,
+                android.media.ExifInterface(file.absolutePath).getAttributeInt(
+                    android.media.ExifInterface.TAG_ORIENTATION,
+                    android.media.ExifInterface.ORIENTATION_UNDEFINED,
+                ),
+            )
+        } finally {
+            file.delete()
+        }
+    }
+
     private fun assertRejected(result: ReceiptImageSniffResult, reasonCode: String) {
         assertTrue(result is ReceiptImageSniffResult.Rejected)
         val rejected = result as ReceiptImageSniffResult.Rejected
@@ -110,6 +167,16 @@ class ReceiptImageFormatTest {
         val out = ByteArrayOutputStream()
         check(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out))
         return out.toByteArray()
+    }
+
+    private fun isMostlyRed(bitmap: Bitmap, left: Int, top: Int, right: Int, bottom: Int): Boolean {
+        val pixel = bitmap.getPixel((left + right) / 2, (top + bottom) / 2)
+        return android.graphics.Color.red(pixel) > 200 && android.graphics.Color.blue(pixel) < 80
+    }
+
+    private fun isMostlyBlue(bitmap: Bitmap, left: Int, top: Int, right: Int, bottom: Int): Boolean {
+        val pixel = bitmap.getPixel((left + right) / 2, (top + bottom) / 2)
+        return android.graphics.Color.blue(pixel) > 200 && android.graphics.Color.red(pixel) < 80
     }
 
     private fun miniaturePng(): ByteArray {

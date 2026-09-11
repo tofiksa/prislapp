@@ -3,6 +3,7 @@ package no.prislapp.data.receipt
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.media.ExifInterface
 import no.prislapp.R
 import java.io.File
 
@@ -69,13 +70,15 @@ private fun sniffReceiptImage(
 
 fun rotateReceiptImageIfNeeded(file: File, rotationDegrees: Int): File {
     val normalized = ((rotationDegrees % 360) + 360) % 360
-    if (normalized == 0) return file
+    val exifOrientation = readExifOrientation(file)
+    if (normalized == 0 && isExifAlreadyNormal(exifOrientation)) {
+        return file
+    }
     val sniff = ReceiptImageFormat.sniffReceiptImage(file)
     check(sniff is ReceiptImageSniffResult.Accepted) { "Kan ikke rotere avvist bilde" }
     val source = BitmapFactory.decodeFile(file.absolutePath)
         ?: error("Kunne ikke dekode kvitteringsbildet")
-    val matrix = Matrix().apply { postRotate(normalized.toFloat()) }
-    val rotated = Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, false)
+    val rotated = bakeExifAndUserRotation(source, exifOrientation, normalized)
     val format = if (sniff.mimeType == ReceiptImageFormat.MIME_PNG) {
         Bitmap.CompressFormat.PNG
     } else {
@@ -89,7 +92,115 @@ fun rotateReceiptImageIfNeeded(file: File, rotationDegrees: Int): File {
         source.recycle()
         rotated.recycle()
     }
+    if (format == Bitmap.CompressFormat.JPEG) {
+        resetExifOrientationToNormal(file)
+    }
     return file
+}
+
+private fun readExifOrientation(file: File): Int {
+    return try {
+        ExifInterface(file.absolutePath).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_UNDEFINED,
+        )
+    } catch (_: Exception) {
+        ExifInterface.ORIENTATION_UNDEFINED
+    }
+}
+
+private fun isExifAlreadyNormal(orientation: Int): Boolean =
+    orientation == ExifInterface.ORIENTATION_UNDEFINED ||
+        orientation == ExifInterface.ORIENTATION_NORMAL
+
+private fun bakeExifAndUserRotation(
+    source: Bitmap,
+    exifOrientation: Int,
+    userDegrees: Int,
+): Bitmap {
+    if (hasExifFlip(exifOrientation)) {
+        val matrix = Matrix()
+        applyExifOrientation(matrix, exifOrientation)
+        if (userDegrees != 0) {
+            matrix.postRotate(userDegrees.toFloat())
+        }
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
+    }
+    return rotateRightAngles(source, combinedRotationDegrees(exifOrientation, userDegrees))
+}
+
+private fun combinedRotationDegrees(exifOrientation: Int, userDegrees: Int): Int {
+    val exifDegrees = when (exifOrientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> 90
+        ExifInterface.ORIENTATION_ROTATE_180 -> 180
+        ExifInterface.ORIENTATION_ROTATE_270 -> 270
+        else -> 0
+    }
+    return (exifDegrees + userDegrees) % 360
+}
+
+private fun hasExifFlip(orientation: Int): Boolean = when (orientation) {
+    ExifInterface.ORIENTATION_FLIP_HORIZONTAL,
+    ExifInterface.ORIENTATION_FLIP_VERTICAL,
+    ExifInterface.ORIENTATION_TRANSPOSE,
+    ExifInterface.ORIENTATION_TRANSVERSE,
+    -> true
+    else -> false
+}
+
+private fun applyExifOrientation(matrix: Matrix, orientation: Int) {
+    when (orientation) {
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.setRotate(180f)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+            matrix.setRotate(180f)
+            matrix.postScale(-1f, 1f)
+        }
+        ExifInterface.ORIENTATION_TRANSPOSE -> {
+            matrix.setRotate(90f)
+            matrix.postScale(-1f, 1f)
+        }
+        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.setRotate(90f)
+        ExifInterface.ORIENTATION_TRANSVERSE -> {
+            matrix.setRotate(-90f)
+            matrix.postScale(-1f, 1f)
+        }
+        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(-90f)
+    }
+}
+
+private fun rotateRightAngles(source: Bitmap, degrees: Int): Bitmap {
+    if (degrees == 0) return source
+    val srcW = source.width
+    val srcH = source.height
+    val destW = if (degrees == 180) srcW else srcH
+    val destH = if (degrees == 180) srcH else srcW
+    val dest = Bitmap.createBitmap(destW, destH, source.config ?: Bitmap.Config.ARGB_8888)
+    val srcPixels = IntArray(srcW * srcH)
+    source.getPixels(srcPixels, 0, srcW, 0, 0, srcW, srcH)
+    val destPixels = IntArray(destW * destH)
+    for (y in 0 until srcH) {
+        for (x in 0 until srcW) {
+            val pixel = srcPixels[y * srcW + x]
+            when (degrees) {
+                90 -> destPixels[x * destW + (srcH - 1 - y)] = pixel
+                180 -> destPixels[(srcH - 1 - y) * destW + (srcW - 1 - x)] = pixel
+                else -> destPixels[(srcW - 1 - x) * destW + y] = pixel
+            }
+        }
+    }
+    dest.setPixels(destPixels, 0, destW, 0, 0, destW, destH)
+    return dest
+}
+
+private fun resetExifOrientationToNormal(file: File) {
+    ExifInterface(file.absolutePath).apply {
+        setAttribute(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL.toString(),
+        )
+        saveAttributes()
+    }
 }
 
 private fun rejected(reasonCode: String) = ReceiptImageSniffResult.Rejected(
