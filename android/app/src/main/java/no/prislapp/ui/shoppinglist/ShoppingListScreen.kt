@@ -1,6 +1,7 @@
 package no.prislapp.ui.shoppinglist
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -61,24 +62,37 @@ fun ShoppingListScreen(
     viewModel: ShoppingListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    var addSheetOpen by remember { mutableStateOf(false) }
+    val listSnackbarHostState = remember { SnackbarHostState() }
+    val sheetSnackbarHostState = remember { SnackbarHostState() }
     val undoMessage = when (uiState.pendingUndo) {
         is ShoppingListUndo.RestoreQuantity -> stringResource(R.string.shopping_list_quantity_updated)
         is ShoppingListUndo.Undelete -> stringResource(R.string.shopping_list_item_removed)
         null -> null
     }
     val undoLabel = stringResource(R.string.shopping_list_undo)
+    val pendingUndo = uiState.pendingUndo
 
-    LaunchedEffect(uiState.pendingUndo) {
+    LaunchedEffect(pendingUndo, uiState.undoSnackbarOnSheet) {
         val message = undoMessage ?: return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(
+        val host = if (uiState.undoSnackbarOnSheet) {
+            sheetSnackbarHostState
+        } else {
+            listSnackbarHostState
+        }
+        val other = if (uiState.undoSnackbarOnSheet) {
+            listSnackbarHostState
+        } else {
+            sheetSnackbarHostState
+        }
+        other.currentSnackbarData?.dismiss()
+        host.currentSnackbarData?.dismiss()
+        val result = host.showSnackbar(
             message = message,
             actionLabel = undoLabel,
         )
         if (result == SnackbarResult.ActionPerformed) {
             viewModel.undo()
-        } else {
+        } else if (viewModel.uiState.value.pendingUndo === pendingUndo) {
             viewModel.dismissUndo()
         }
     }
@@ -87,9 +101,9 @@ fun ShoppingListScreen(
         topBar = {
             PrislappTopBar(title = stringResource(R.string.shopping_list_title))
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackbarHost(listSnackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { addSheetOpen = true }) {
+            FloatingActionButton(onClick = viewModel::openAddSheet) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = stringResource(R.string.shopping_list_add),
@@ -136,13 +150,14 @@ fun ShoppingListScreen(
         }
     }
 
-    if (addSheetOpen) {
+    if (uiState.showAddSheet) {
         AddItemSheet(
             recentProducts = uiState.recentProducts,
             catalogOfflineEmpty = uiState.catalogOfflineEmpty,
+            snackbarHostState = if (uiState.undoSnackbarOnSheet) sheetSnackbarHostState else null,
             onAddProduct = viewModel::addRecentProduct,
             onAddFreeText = viewModel::addFreeText,
-            onDismiss = { addSheetOpen = false },
+            onDismiss = viewModel::dismissAddSheet,
         )
     }
 }
@@ -238,6 +253,7 @@ private fun ShoppingListItemRow(
 private fun AddItemSheet(
     recentProducts: List<RecentProductUi>,
     catalogOfflineEmpty: Boolean,
+    snackbarHostState: SnackbarHostState?,
     onAddProduct: (String) -> Unit,
     onAddFreeText: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -250,12 +266,16 @@ private fun AddItemSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
                 .padding(bottom = 32.dp),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
             Text(
                 text = stringResource(R.string.shopping_list_add),
                 style = MaterialTheme.typography.titleLarge,
@@ -342,6 +362,13 @@ private fun AddItemSheet(
                 ) {
                     Text(stringResource(R.string.shopping_list_add))
                 }
+            }
+            }
+            snackbarHostState?.let { host ->
+                SnackbarHost(
+                    hostState = host,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
             }
         }
     }

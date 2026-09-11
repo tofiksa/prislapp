@@ -46,6 +46,14 @@ class ShoppingListViewModel @Inject constructor(
         refreshRecent()
     }
 
+    fun openAddSheet() {
+        _uiState.update { it.copy(showAddSheet = true) }
+    }
+
+    fun dismissAddSheet() {
+        _uiState.update { it.copy(showAddSheet = false) }
+    }
+
     fun addRecentProduct(productId: String) {
         viewModelScope.launch {
             writeMutex.withLock {
@@ -185,6 +193,7 @@ class ShoppingListViewModel @Inject constructor(
                             listId = mapped.listId ?: previous.listId,
                             listName = mapped.listName.ifEmpty { previous.listName },
                             pendingUndo = previous.pendingUndo,
+                            showAddSheet = previous.showAddSheet,
                         )
                     }
                 }

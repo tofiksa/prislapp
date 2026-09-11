@@ -9,8 +9,12 @@ data class ShoppingListUiState(
     val recentProducts: List<RecentProductUi> = emptyList(),
     val showConflictBanner: Boolean = false,
     val catalogOfflineEmpty: Boolean = false,
+    val showAddSheet: Boolean = false,
     val pendingUndo: ShoppingListUndo? = null,
-)
+) {
+    val undoSnackbarOnSheet: Boolean
+        get() = showAddSheet && pendingUndo is ShoppingListUndo.RestoreQuantity
+}
 
 data class ShoppingListItemUi(
     val id: String,

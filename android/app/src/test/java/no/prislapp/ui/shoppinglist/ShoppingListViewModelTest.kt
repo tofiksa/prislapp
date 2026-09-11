@@ -153,6 +153,70 @@ class ShoppingListViewModelTest {
     }
 
     @Test
+    fun mergeUndoKeepsAddSheetOpenAndHostsSnackbarOnSheet() = runTest(dispatcher) {
+        val fixture = Fixture()
+        fixture.products.value = listOf(
+            CachedUserProductEntity(
+                id = "p-melk",
+                userId = "user-a",
+                displayName = "Melk",
+                packUnit = "each",
+            ),
+        )
+        var addCount = 0
+        coEvery {
+            fixture.repo.addProductOrIncrement(any(), eq("p-melk"), any(), any(), any())
+        } coAnswers {
+            fixture.items.value = listOf(
+                item(id = "item-1", userProductId = "p-melk"),
+            )
+            val previous = if (addCount == 0) null else BigDecimal("$addCount.000")
+            addCount++
+            AddItemResult(itemId = "item-1", previousQuantity = previous)
+        }
+        val vm = ShoppingListViewModel(fixture.repo)
+        advanceUntilIdle()
+
+        vm.openAddSheet()
+        assertTrue(vm.uiState.value.showAddSheet)
+
+        vm.addRecentProduct("p-melk")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.showAddSheet)
+        assertFalse(vm.uiState.value.undoSnackbarOnSheet)
+
+        vm.addRecentProduct("p-melk")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.showAddSheet)
+        assertTrue(vm.uiState.value.pendingUndo is ShoppingListUndo.RestoreQuantity)
+        assertTrue(vm.uiState.value.undoSnackbarOnSheet)
+
+        vm.addRecentProduct("p-melk")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.showAddSheet)
+        assertTrue(vm.uiState.value.undoSnackbarOnSheet)
+
+        vm.dismissAddSheet()
+        assertFalse(vm.uiState.value.showAddSheet)
+        assertFalse(vm.uiState.value.undoSnackbarOnSheet)
+        assertTrue(vm.uiState.value.pendingUndo is ShoppingListUndo.RestoreQuantity)
+    }
+
+    @Test
+    fun deleteUndoDoesNotHostSnackbarOnSheet() = runTest(dispatcher) {
+        val fixture = Fixture()
+        val vm = ShoppingListViewModel(fixture.repo)
+        advanceUntilIdle()
+
+        vm.deleteItem("item-1")
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.showAddSheet)
+        assertFalse(vm.uiState.value.undoSnackbarOnSheet)
+        assertTrue(vm.uiState.value.pendingUndo is ShoppingListUndo.Undelete)
+    }
+
+    @Test
     fun freeTextMelkIsNotMergedWithProductMelk() = runTest(dispatcher) {
         val fixture = Fixture()
         fixture.products.value = listOf(
