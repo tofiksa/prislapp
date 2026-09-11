@@ -142,10 +142,13 @@ async def claim_ocr_job(
         return None
 
     now = datetime.now(timezone.utc)
+    lease = job.lease_expires_at
+    if lease is not None and lease.tzinfo is None:
+        lease = lease.replace(tzinfo=timezone.utc)
     if (
         job.status == JobOutboxStatus.PROCESSING.value
-        and job.lease_expires_at is not None
-        and job.lease_expires_at > now
+        and lease is not None
+        and lease > now
     ):
         return None
 
@@ -204,8 +207,8 @@ async def complete_ocr_result(
     store_name: str | None = None,
     store_chain: str | None = None,
 ) -> bool:
-    job = await _lock_active_job(db, receipt_id)
-    if job is None or job.attempt_id != attempt_id:
+    job = await _lock_active_job(db, receipt_id, attempt_id)
+    if job is None:
         return False
 
     user = await _lock_user(db, job.user_id)
@@ -238,8 +241,8 @@ async def fail_ocr_job(
     error_code: str,
     permanent: bool,
 ) -> None:
-    job = await _lock_active_job(db, receipt_id)
-    if job is None or job.attempt_id != attempt_id:
+    job = await _lock_active_job(db, receipt_id, attempt_id)
+    if job is None:
         return
 
     job.last_error_code = error_code
@@ -295,15 +298,23 @@ async def _active_job(db: AsyncSession, receipt_id: uuid.UUID) -> JobOutbox | No
     return result.scalar_one_or_none()
 
 
-async def _lock_active_job(db: AsyncSession, receipt_id: uuid.UUID) -> JobOutbox | None:
+async def _lock_active_job(
+    db: AsyncSession,
+    receipt_id: uuid.UUID,
+    attempt_id: uuid.UUID | None = None,
+) -> JobOutbox | None:
+    clauses = [
+        JobOutbox.job_type == JobType.OCR_PROCESS.value,
+        JobOutbox.aggregate_id == receipt_id,
+        JobOutbox.status.notin_(_TERMINAL),
+    ]
+    if attempt_id is not None:
+        clauses.append(JobOutbox.attempt_id == attempt_id)
     result = await db.execute(
         select(JobOutbox)
-        .where(
-            JobOutbox.job_type == JobType.OCR_PROCESS.value,
-            JobOutbox.aggregate_id == receipt_id,
-            JobOutbox.status.notin_(_TERMINAL),
-        )
-        .with_for_update(),
+        .where(*clauses)
+        .with_for_update()
+        .execution_options(populate_existing=True),
     )
     return result.scalar_one_or_none()
 

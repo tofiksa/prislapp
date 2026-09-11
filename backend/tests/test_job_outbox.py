@@ -7,7 +7,7 @@ from uuid import UUID
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.product import PriceObservation
 from app.models.receipt import Receipt, ReceiptStatus
@@ -260,6 +260,135 @@ async def test_stale_attempt_does_not_write_parsed_receipt_twice(db_session: Asy
     jobs = await _outbox_for(db_session, receipt.id)
     assert jobs[0].status == JobOutboxStatus.DONE.value
     assert jobs[0].attempt_id == second.attempt_id
+
+
+_STALE_ITEMS = [
+    {
+        "raw_product_name": "Melk",
+        "quantity": 1,
+        "unit_price": None,
+        "line_total": 10,
+    }
+]
+
+
+def _session_for_same_db(session: AsyncSession) -> AsyncSession:
+    maker = async_sessionmaker(
+        session.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    return maker()
+
+
+async def _claim_a_then_reclaim_b_on_other_session(session1: AsyncSession, email: str):
+    from app.models.job_outbox import JobOutbox
+    from app.services.ocr_outbox import claim_ocr_job
+
+    user = User(email=email, password_hash="hash")
+    session1.add(user)
+    await session1.commit()
+    await session1.refresh(user)
+
+    receipt = await ReceiptService(session1).create_receipt(
+        user, b"image-bytes", "image/jpeg",
+    )
+    first = await claim_ocr_job(session1, receipt.id)
+    assert first is not None
+
+    cached = await session1.get(JobOutbox, first.outbox_id)
+    # SQLite returns naive datetimes; a past timestamptz cannot be compared
+    # to aware `now` in claim. Clearing the lease is the reclaimable state.
+    cached.lease_expires_at = None
+    await session1.commit()
+    assert cached.attempt_id == first.attempt_id
+
+    async with _session_for_same_db(session1) as session2:
+        second = await claim_ocr_job(session2, receipt.id)
+        assert second is not None
+        assert second.attempt_id != first.attempt_id
+
+    # Worker session still holds the pre-reclaim row (expire_on_commit=False).
+    assert cached.attempt_id == first.attempt_id
+    return receipt, first, second, cached
+
+
+async def _committed_outbox_and_receipt(db: AsyncSession, outbox_id, receipt_id):
+    from app.models.job_outbox import JobOutbox
+
+    db.expire_all()
+    job = await db.get(JobOutbox, outbox_id)
+    stored = await db.get(Receipt, receipt_id)
+    return job, stored
+
+
+@pytest.mark.asyncio
+async def test_stale_session_complete_does_not_overwrite_newer_claim(
+    db_session: AsyncSession,
+):
+    from app.models.job_outbox import JobOutboxStatus
+    from app.models.receipt_item import ReceiptItem
+    from app.services.ocr_outbox import complete_ocr_result
+
+    receipt, first, second, cached = await _claim_a_then_reclaim_b_on_other_session(
+        db_session, "stale-session-complete@example.com",
+    )
+    assert cached.attempt_id == first.attempt_id
+
+    wrote = await complete_ocr_result(
+        db_session,
+        receipt.id,
+        first.attempt_id,
+        "x",
+        None,
+        None,
+        None,
+        _STALE_ITEMS,
+    )
+    assert wrote is False
+
+    job, stored = await _committed_outbox_and_receipt(
+        db_session, first.outbox_id, receipt.id,
+    )
+    item_id = await db_session.scalar(
+        select(ReceiptItem.id).where(ReceiptItem.receipt_id == receipt.id),
+    )
+
+    assert stored.status != ReceiptStatus.READY_FOR_REVIEW.value
+    assert stored.status == ReceiptStatus.PROCESSING.value
+    assert job.status == JobOutboxStatus.PROCESSING.value
+    assert job.attempt_id == second.attempt_id
+    assert item_id is None
+
+
+@pytest.mark.asyncio
+async def test_stale_session_fail_does_not_overwrite_newer_claim(
+    db_session: AsyncSession,
+):
+    from app.models.job_outbox import JobOutboxStatus
+    from app.services.ocr_outbox import fail_ocr_job
+
+    receipt, first, second, cached = await _claim_a_then_reclaim_b_on_other_session(
+        db_session, "stale-session-fail@example.com",
+    )
+    assert cached.attempt_id == first.attempt_id
+
+    await fail_ocr_job(
+        db_session,
+        receipt.id,
+        first.attempt_id,
+        "OCR_FAILED",
+        permanent=False,
+    )
+
+    job, stored = await _committed_outbox_and_receipt(
+        db_session, first.outbox_id, receipt.id,
+    )
+
+    assert stored.status == ReceiptStatus.PROCESSING.value
+    assert job.status == JobOutboxStatus.PROCESSING.value
+    assert job.attempt_id == second.attempt_id
+    assert job.last_error_code != "OCR_FAILED"
 
 
 @pytest.mark.asyncio
