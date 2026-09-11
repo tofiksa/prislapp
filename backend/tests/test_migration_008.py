@@ -81,8 +81,8 @@ def _seed_user(database: Path) -> str:
     return user_id
 
 
-def test_008_is_head_and_declared_for_schema_verification():
-    assert run_migrations.migration_revisions()[-1] == "008"
+def test_008_is_in_the_chain_and_declared_for_schema_verification():
+    assert "008" in run_migrations.migration_revisions()
     declared = {revision.revision for revision in run_migrations.SCHEMA_REVISIONS}
     assert "008" in declared
 

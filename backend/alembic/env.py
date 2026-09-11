@@ -10,11 +10,13 @@ from app.config import settings
 from app.database import Base
 from app.models import (  # noqa: F401
     AccountLedger,
+    PasswordResetToken,
     PriceObservation,
     Product,
     ProductAlias,
     Receipt,
     ReceiptItem,
+    RefreshSession,
     Store,
     User,
     UserProduct,

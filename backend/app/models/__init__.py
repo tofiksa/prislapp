@@ -1,4 +1,5 @@
 from app.models.account_ledger import AccountLedger
+from app.models.auth_session import PasswordResetToken, RefreshSession
 from app.models.product import PriceObservation, Product, ProductAlias
 from app.models.receipt import Receipt, ReceiptStatus
 from app.models.receipt_item import ReceiptItem
@@ -32,6 +33,8 @@ from app.models.user_store import StoreIdentityLevel, UserStore
 
 __all__ = [
     "User",
+    "RefreshSession",
+    "PasswordResetToken",
     "Store",
     "Receipt",
     "ReceiptStatus",

@@ -22,7 +22,8 @@
           }
         },
         "responses": {
-          "202": { "description": "Mottatt. Aldri skill kjente og ukjente adresser." }
+          "202": { "description": "Mottatt. Aldri skill kjente og ukjente adresser." },
+          "429": { "$ref": "#/components/responses/Error" }
         }
       }
     },
@@ -47,7 +48,15 @@
       "post": {
         "operationId": "logout",
         "security": [{ "bearerAuth": [] }],
-        "responses": { "204": { "description": "Gjeldende refresh-token tilbakekalt." } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshRequest" }
+            }
+          }
+        },
+        "responses": { "204": { "description": "Gjeldende refresh-token tilbakekalt. Body-feltet er refresh_token, som på /auth/refresh." } }
       }
     },
     "/auth/logout-all": {
@@ -501,6 +510,11 @@
           "token": { "type": "string" },
           "new_password": { "type": "string", "minLength": 8 }
         }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": ["refresh_token"],
+        "properties": { "refresh_token": { "type": "string" } }
       },
       "AccountDeletionStatus": {
         "type": "object",

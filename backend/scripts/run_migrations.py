@@ -285,6 +285,27 @@ SCHEMA_REVISIONS: tuple[SchemaRevision, ...] = (
             ),
         },
     ),
+    SchemaRevision(
+        "009",
+        {
+            "refresh_sessions": (
+                "id",
+                "user_id",
+                "token_hash",
+                "family_id",
+                "revoked_at",
+                "replaced_by",
+                "expires_at",
+            ),
+            "password_reset_tokens": (
+                "id",
+                "user_id",
+                "token_hash",
+                "expires_at",
+                "used_at",
+            ),
+        },
+    ),
 )
 
 # Datamigreringer etterlater ingen skjemaspor. De kjøres på nytt etter stamping,
