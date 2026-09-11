@@ -177,6 +177,48 @@ class ShoppingListRepository @Inject constructor(
         }
     }
 
+    suspend fun setItemDeleted(listId: String, itemId: String, deleted: Boolean = true) {
+        patchItem(listId, itemId, { it.copy(deleted = deleted) }) { current, mutationId ->
+            SyncMutationDto(
+                operation = MutationOutboxEntity.OP_ITEM_PATCH,
+                mutation_id = mutationId,
+                list_id = listId,
+                item_id = itemId,
+                expected_version = current.version,
+                deleted = deleted,
+            )
+        }
+    }
+
+    suspend fun setListDeleted(listId: String, deleted: Boolean = true) {
+        patchList(listId, { it.copy(deleted = deleted) }) { current, mutationId ->
+            SyncMutationDto(
+                operation = MutationOutboxEntity.OP_LIST_PATCH,
+                mutation_id = mutationId,
+                list_id = listId,
+                expected_version = current.version,
+                deleted = deleted,
+            )
+        }
+    }
+
+    suspend fun setListArchived(listId: String, archived: Boolean) {
+        val status = if (archived) {
+            ShoppingListEntity.STATUS_ARCHIVED
+        } else {
+            ShoppingListEntity.STATUS_ACTIVE
+        }
+        patchList(listId, { it.copy(status = status) }) { current, mutationId ->
+            SyncMutationDto(
+                operation = MutationOutboxEntity.OP_LIST_PATCH,
+                mutation_id = mutationId,
+                list_id = listId,
+                expected_version = current.version,
+                status = status,
+            )
+        }
+    }
+
     suspend fun getItem(itemId: String): ShoppingListItemEntity? {
         val userId = accountSession.currentUserId() ?: return null
         return itemDao.get(itemId, userId)
@@ -269,77 +311,90 @@ class ShoppingListRepository @Inject constructor(
         enqueueSync()
     }
 
+    private suspend fun patchList(
+        listId: String,
+        update: (ShoppingListEntity) -> ShoppingListEntity,
+        mutation: (ShoppingListEntity, String) -> SyncMutationDto,
+    ) {
+        val userId = requireUser()
+        transactionRunner.run {
+            val current = listDao.get(listId, userId) ?: error("Listen finnes ikke")
+            listDao.upsert(update(current))
+            val dto = mutation(current, UUID.randomUUID().toString())
+            outboxDao.upsert(toOutbox(dto, userId, listId))
+        }
+        enqueueSync()
+    }
+
     private suspend fun applyResponse(
         userId: String,
         sent: List<MutationOutboxEntity>,
         response: SyncResponseDto,
     ) {
-        val conflicts = response.conflicts.associateBy { it.mutation_id }
-        for (row in sent) {
-            val conflict = conflicts[row.mutationId]
-            if (conflict == null) {
-                outboxDao.delete(row.mutationId)
-                conflictDao.delete(row.mutationId)
-                continue
+        transactionRunner.run {
+            val conflicts = response.conflicts.associateBy { it.mutation_id }
+            for (row in sent) {
+                val conflict = conflicts[row.mutationId]
+                if (conflict == null) {
+                    outboxDao.delete(row.mutationId)
+                    conflictDao.delete(row.mutationId)
+                    continue
+                }
+                if (conflict.code == "CURSOR_EXPIRED") {
+                    outboxDao.upsert(row.copy(status = MutationOutboxEntity.STATUS_PENDING))
+                    conflictDao.delete(row.mutationId)
+                    continue
+                }
+                outboxDao.upsert(row.copy(status = MutationOutboxEntity.STATUS_CONFLICT))
+                conflictDao.upsert(
+                    SyncConflictEntity(
+                        mutationId = conflict.mutation_id,
+                        userId = userId,
+                        operation = conflict.operation,
+                        code = conflict.code,
+                        message = conflict.message,
+                        localJson = conflict.local?.toString() ?: row.payloadJson,
+                        serverJson = conflict.server?.toString(),
+                        listId = row.listId,
+                        itemId = row.itemId,
+                    ),
+                )
             }
-            val blocked = conflict.code == "CURSOR_EXPIRED"
-            outboxDao.upsert(
-                row.copy(
-                    status = if (blocked) {
-                        MutationOutboxEntity.STATUS_BLOCKED
-                    } else {
-                        MutationOutboxEntity.STATUS_CONFLICT
-                    },
-                ),
-            )
-            conflictDao.upsert(
-                SyncConflictEntity(
-                    mutationId = conflict.mutation_id,
-                    userId = userId,
-                    operation = conflict.operation,
-                    code = conflict.code,
-                    message = conflict.message,
-                    localJson = conflict.local?.toString() ?: row.payloadJson,
-                    serverJson = conflict.server?.toString(),
-                    listId = row.listId,
-                    itemId = row.itemId,
-                ),
-            )
-        }
 
-        val protecting = outboxDao.getProtecting(userId)
-        val protectedLists = protecting.mapNotNull { it.listId }.toSet()
-        val protectedItems = protecting.mapNotNull { it.itemId }.toSet()
+            val protecting = outboxDao.getProtecting(userId)
+            val protectedLists = protecting.mapNotNull { it.listId }.toSet()
+            val protectedItems = protecting.mapNotNull { it.itemId }.toSet()
 
-        if (response.full_snapshot) {
-            val snapshotListIds = response.lists.map { it.id }.toSet()
-            val snapshotItemIds = response.lists.flatMap { list -> list.items.map { it.id } }.toSet()
-            for (existing in listDao.getAllForUser(userId)) {
-                if (existing.id !in snapshotListIds && existing.id !in protectedLists) {
-                    listDao.delete(existing.id, userId)
+            if (response.full_snapshot) {
+                val snapshotListIds = response.lists.map { it.id }.toSet()
+                val snapshotItemIds = response.lists.flatMap { list -> list.items.map { it.id } }.toSet()
+                for (existing in listDao.getAllForUser(userId)) {
+                    if (existing.id !in snapshotListIds && existing.id !in protectedLists) {
+                        listDao.delete(existing.id, userId)
+                    }
+                }
+                for (existing in itemDao.getAllForUser(userId)) {
+                    if (existing.id !in snapshotItemIds && existing.id !in protectedItems) {
+                        itemDao.delete(existing.id, userId)
+                    }
                 }
             }
-            for (existing in itemDao.getAllForUser(userId)) {
-                if (existing.id !in snapshotItemIds && existing.id !in protectedItems) {
-                    itemDao.delete(existing.id, userId)
+
+            for (list in response.lists) {
+                val localList = listDao.get(list.id, userId)
+                val keepLocalList = list.id in protectedLists && localList != null
+                if (!keepLocalList) {
+                    listDao.upsert(list.toEntity(userId))
+                } else if (list.deleted || list.status == ShoppingListEntity.STATUS_ARCHIVED) {
+                    listDao.upsert(localList.copy(isDraft = true))
+                }
+                for (item in list.items) {
+                    if (item.id in protectedItems) continue
+                    itemDao.upsert(item.toEntity(list.id, userId))
                 }
             }
+            syncStateDao.upsert(SyncStateEntity(userId = userId, cursor = response.cursor))
         }
-
-        for (list in response.lists) {
-            val localList = listDao.get(list.id, userId)
-            val keepLocalList = list.id in protectedLists && localList != null
-            if (!keepLocalList) {
-                listDao.upsert(list.toEntity(userId))
-            } else if (list.deleted || list.status == ShoppingListEntity.STATUS_ARCHIVED) {
-                listDao.upsert(localList.copy(isDraft = true))
-            }
-            for (item in list.items) {
-                if (item.id in protectedItems) continue
-                itemDao.upsert(item.toEntity(list.id, userId))
-            }
-        }
-        syncStateDao.upsert(SyncStateEntity(userId = userId, cursor = response.cursor))
     }
 
     private suspend fun applyServerSnapshot(userId: String, conflict: SyncConflictEntity) {

@@ -82,7 +82,7 @@ class FakeShoppingListItemDao(private val db: ShoppingListMemoryDb) : ShoppingLi
             .maxOfOrNull { it.position } ?: -1
 }
 
-class FakeMutationOutboxDao(private val db: ShoppingListMemoryDb) : MutationOutboxDao {
+open class FakeMutationOutboxDao(private val db: ShoppingListMemoryDb) : MutationOutboxDao {
     override suspend fun upsert(entity: MutationOutboxEntity) {
         db.outbox.removeAll { it.mutationId == entity.mutationId }
         db.outbox.add(entity)

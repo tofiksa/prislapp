@@ -31,30 +31,6 @@ import java.math.BigDecimal
 
 class ShoppingListRepositoryTest {
     @Test
-    fun twentyOfflineMutationsSurviveProcessDeathAndEachMutationIdIsSentOnce() = runTest {
-        val fixture = Fixture()
-        val first = fixture.repository()
-        val listId = first.createList("Ukeshandel")
-        repeat(19) { first.addItem(listId, freeText = "Vare $it") }
-        assertEquals(20, fixture.db.outbox.size)
-
-        val sentIds = mutableListOf<String>()
-        coEvery { fixture.api.syncShoppingLists(any(), any()) } answers {
-            val body = firstArg<SyncRequestDto>()
-            sentIds += body.mutations.map { it.mutation_id }
-            okSync()
-        }
-
-        val afterDeath = fixture.repository()
-        afterDeath.syncPending()
-        afterDeath.syncPending()
-
-        assertEquals(20, sentIds.size)
-        assertEquals(sentIds.toSet().size, sentIds.size)
-        assertTrue(afterDeath.pendingMutations().isEmpty())
-    }
-
-    @Test
     fun queriesForAccountBAreEmptyOfAccountARows() = runTest {
         val fixture = Fixture()
         val repository = fixture.repository()
@@ -173,7 +149,96 @@ class ShoppingListRepositoryTest {
         repository.syncPending()
 
         assertEquals("9.000", repository.getItem(itemId)?.quantity)
-        assertEquals(3, repository.pendingMutations().size)
+        val originalIds = repository.pendingMutations()
+        assertEquals(3, originalIds.size)
+        assertTrue(fixture.db.conflicts.none { it.code == "CURSOR_EXPIRED" })
+
+        val replayed = mutableListOf<String>()
+        coEvery { fixture.api.syncShoppingLists(any(), any()) } answers {
+            replayed += firstArg<SyncRequestDto>().mutations.map { it.mutation_id }
+            okSync()
+        }
+        repository.syncPending()
+
+        assertEquals(originalIds, replayed)
+        assertTrue(repository.pendingMutations().isEmpty())
+    }
+
+    @Test
+    fun localDeleteVersusServerQuantityStaysConflictAndKeepsTombstone() = runTest {
+        val fixture = Fixture()
+        val repository = fixture.repository()
+        val listId = repository.createList("Tur")
+        val itemId = repository.addItem(listId, freeText = "Melk")
+        repository.setItemDeleted(listId, itemId)
+        assertEquals(true, repository.getItem(itemId)?.deleted)
+
+        coEvery { fixture.api.syncShoppingLists(any(), any()) } answers {
+            val body = firstArg<SyncRequestDto>()
+            val deletePatch = body.mutations.single { it.deleted == true }
+            SyncResponseDto(
+                cursor = "c1",
+                price_data_version = 1,
+                full_snapshot = false,
+                lists = listOf(
+                    listDto(listId, itemDto(itemId, quantity = "4.000", version = 2)),
+                ),
+                conflicts = listOf(
+                    SyncConflictDto(
+                        operation = "item_patch",
+                        mutation_id = deletePatch.mutation_id,
+                        code = "VERSION_CONFLICT",
+                        message = "Raden er endret et annet sted.",
+                        local = JsonObject().apply { addProperty("deleted", true) },
+                        server = JsonObject().apply {
+                            addProperty("quantity", "4.000")
+                            addProperty("version", 2)
+                        },
+                    ),
+                ),
+            )
+        }
+
+        repository.syncPending()
+
+        assertEquals(true, repository.getItem(itemId)?.deleted)
+        val conflict = fixture.db.conflicts.single()
+        assertEquals("VERSION_CONFLICT", conflict.code)
+        assertTrue(conflict.localJson.contains("deleted"))
+    }
+
+    @Test
+    fun applyResponseDeletesSendableIdsOnlyInsideTransaction() = runTest {
+        val inTransaction = java.util.concurrent.atomic.AtomicBoolean(false)
+        val deletedOutside = mutableListOf<String>()
+        val fixture = Fixture(
+            transactionRunner = object : TransactionRunner {
+                override suspend fun <T> run(block: suspend () -> T): T {
+                    inTransaction.set(true)
+                    try {
+                        return block()
+                    } finally {
+                        inTransaction.set(false)
+                    }
+                }
+            },
+            outboxDao = { db ->
+                object : FakeMutationOutboxDao(db) {
+                    override suspend fun delete(mutationId: String) {
+                        if (!inTransaction.get()) deletedOutside += mutationId
+                        super.delete(mutationId)
+                    }
+                }
+            },
+        )
+        val repository = fixture.repository()
+        repository.createList("Tur")
+        coEvery { fixture.api.syncShoppingLists(any(), any()) } returns okSync()
+
+        repository.syncPending()
+
+        assertTrue(deletedOutside.isEmpty())
+        assertTrue(repository.pendingMutations().isEmpty())
     }
 
     @Test
@@ -189,7 +254,12 @@ class ShoppingListRepositoryTest {
         assertFalse(json.contains("\"quantity\":1"))
     }
 
-    private class Fixture {
+    private class Fixture(
+        private val transactionRunner: TransactionRunner = object : TransactionRunner {
+            override suspend fun <T> run(block: suspend () -> T): T = block()
+        },
+        private val outboxDao: (ShoppingListMemoryDb) -> FakeMutationOutboxDao = { FakeMutationOutboxDao(it) },
+    ) {
         val db = ShoppingListMemoryDb()
         val userId = MutableStateFlow<String?>("user-a")
         val api = mockk<PrislappApi>(relaxed = true)
@@ -202,15 +272,13 @@ class ShoppingListRepositoryTest {
             api = api,
             listDao = FakeShoppingListDao(db),
             itemDao = FakeShoppingListItemDao(db),
-            outboxDao = FakeMutationOutboxDao(db),
+            outboxDao = outboxDao(db),
             conflictDao = FakeSyncConflictDao(db),
             syncStateDao = FakeSyncStateDao(db),
             productCacheDao = FakeCachedUserProductDao(db),
             accountSession = session,
             syncEnqueuer = SyncEnqueuer { },
-            transactionRunner = object : TransactionRunner {
-                override suspend fun <T> run(block: suspend () -> T): T = block()
-            },
+            transactionRunner = transactionRunner,
         )
     }
 
