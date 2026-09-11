@@ -159,11 +159,7 @@ fun PrislappNavHost(
             ) {
                 ReceiptReviewScreen(
                     onConfirmed = { readyCount ->
-                        navController.navigate(Routes.SHOPPING_LIST) {
-                            popUpTo(Routes.SHOPPING_LIST) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigate(Routes.SHOPPING_LIST, confirmCaptureNavOptions())
                         runCatching {
                             navController.getBackStackEntry(Routes.SHOPPING_LIST)
                                 .savedStateHandle["firstReceiptReadyCount"] = readyCount

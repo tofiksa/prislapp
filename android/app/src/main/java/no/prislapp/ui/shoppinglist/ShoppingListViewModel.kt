@@ -26,6 +26,7 @@ import no.prislapp.data.local.entity.SyncConflictEntity
 import no.prislapp.data.remote.dto.ShoppingListPriceSummaryDto
 import no.prislapp.data.remote.dto.ShoppingListPriceSummaryLineDto
 import no.prislapp.data.repository.PriceSummaryRepository
+import no.prislapp.data.repository.ReceiptRepository
 import no.prislapp.data.repository.ShoppingListRepository
 import no.prislapp.domain.QuantityFormat
 import java.math.BigDecimal
@@ -36,6 +37,7 @@ import javax.inject.Inject
 class ShoppingListViewModel @Inject constructor(
     private val repository: ShoppingListRepository,
     private val priceSummaryRepository: PriceSummaryRepository,
+    private val receiptRepository: ReceiptRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ShoppingListUiState())
     val uiState: StateFlow<ShoppingListUiState> = _uiState.asStateFlow()
@@ -63,6 +65,8 @@ class ShoppingListViewModel @Inject constructor(
     private var priceJob: Job? = null
 
     init {
+        receiptRepository.resumePendingWork()
+        repository.resumePendingWork()
         observeList()
         refreshRecent()
     }

@@ -20,4 +20,13 @@ class LoggedInNavigationTest {
         assertFalse(Routes.TAB_ROUTES.contains(Routes.HOME))
         assertFalse(Routes.TAB_ROUTES.contains(Routes.HISTORY))
     }
+
+    @Test
+    fun confirmCaptureDoesNotSaveOrRestoreTabState() {
+        val options = confirmCaptureNavOptions()
+        assertEquals(Routes.SHOPPING_LIST, options.popUpToRoute)
+        assertFalse(options.shouldPopUpToSaveState())
+        assertFalse(options.shouldRestoreState())
+        assertFalse(options.isPopUpToInclusive())
+    }
 }
