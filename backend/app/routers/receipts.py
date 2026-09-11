@@ -1,9 +1,7 @@
 import uuid
 from datetime import datetime, timezone
-from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
-from PIL import Image, UnidentifiedImageError
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +20,13 @@ from app.schemas.receipt import (
     StoreResponse,
 )
 from app.services.ocr_outbox import enqueue_ocr_job, publish_pending_for_receipt
+from app.services.receipt_image import (
+    MAX_UPLOAD_BYTES,
+    InvalidImageError,
+    idempotency_conflict,
+    inspect_receipt_image,
+    sha256_hex,
+)
 from app.services.receipt_service import ReceiptService
 from app.services.storage_service import StorageService
 
@@ -78,8 +83,9 @@ async def upload_receipt(
             detail="File must be an image",
         )
 
-    image_bytes = await file.read(20 * 1024 * 1024 + 1)
-    if len(image_bytes) > 20 * 1024 * 1024:
+    # S02-C: 20 MiB / 40_000_000 piksler / 12_000 px per side. Ingen nedskalering.
+    image_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(image_bytes) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Image exceeds 20 MB")
     if not image_bytes:
         raise HTTPException(
@@ -88,10 +94,11 @@ async def upload_receipt(
         )
 
     try:
-        with Image.open(BytesIO(image_bytes)) as image:
-            image.verify()
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+        content_type, width, height = inspect_receipt_image(image_bytes)
+    except InvalidImageError as exc:
         raise HTTPException(status_code=400, detail="Invalid image") from exc
+
+    payload_hash = sha256_hex(image_bytes)
 
     service = ReceiptService(db)
     if idempotency_key:
@@ -103,16 +110,18 @@ async def upload_receipt(
         if existing:
             if existing.user_id != current_user.id:
                 raise HTTPException(status_code=409, detail="Capture ID already used")
-            if existing.status == ReceiptStatus.UPLOADED.value:
-                await enqueue_ocr_job(db, current_user.id, existing.id)
-                await db.commit()
-                await publish_pending_for_receipt(db, existing.id)
+            if existing.payload_hash != payload_hash:
+                raise idempotency_conflict()
+            # Replay: ikke ny OCR-jobb om den allerede er queued/processing/done.
             return ReceiptUploadResponse(id=str(existing.id), status=existing.status)
     receipt = await service.create_receipt(
         current_user,
         image_bytes,
-        file.content_type or "image/jpeg",
+        content_type,
         receipt_id=idempotency_key,
+        payload_hash=payload_hash,
+        image_width=width,
+        image_height=height,
     )
     await publish_pending_for_receipt(db, receipt.id)
 

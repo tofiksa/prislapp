@@ -10,7 +10,8 @@ P0 skal **ikke** kjøre destruktiv migrering. Rå kjøpsgrunnlag går ikke tapt.
 4. **008 (S06-A):** `shopping_lists`, `shopping_list_items`, `mutations`, tombstones.
 5. **009 (S09-A):** Auth-sesjoner (`refresh_sessions`, `password_reset_tokens`). Allerede levert.
 6. **010 (S10-B):** `job_outbox` for OCR-jobber og `users.deleted_at` som slettingsgjerde. Eksisterende Celery-kø drains parallelt.
-7. **011 (S09-C):** `account_deletions`, `exports`, retention-felter. Slettemarkør før fysisk sletting.
+7. **011 (S02-C):** `receipts.payload_hash` (SHA-256 av rå filbytes, hex 64), pluss `image_width` / `image_height` / `content_type` etter dekoding. Ingen stille nedskalering. Avviste opplastinger får ikke `job_outbox`.
+8. **012 (S09-C):** `account_deletions`, `exports`, retention-felter. Slettemarkør før fysisk sletting.
 
 Hver migrering har `upgrade` og dokumentert `downgrade` eller forward-fix. Indekser: `(user_id, …)` på alle private tabeller, unik `(user_id, mutation_id, operation)`.
 

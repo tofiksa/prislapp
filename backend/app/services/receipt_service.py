@@ -29,6 +29,9 @@ class ReceiptService:
         image_bytes: bytes,
         content_type: str = "image/jpeg",
         receipt_id: uuid.UUID | None = None,
+        payload_hash: str | None = None,
+        image_width: int | None = None,
+        image_height: int | None = None,
     ) -> Receipt:
         receipt_id = receipt_id or uuid.uuid4()
         extension = "jpg" if "jpeg" in content_type else "png"
@@ -42,6 +45,10 @@ class ReceiptService:
             image_path=object_name,
             image_expires_at=datetime.now(timezone.utc)
             + timedelta(days=settings.receipt_image_retention_days),
+            payload_hash=payload_hash,
+            image_width=image_width,
+            image_height=image_height,
+            content_type=content_type,
         )
         self.db.add(receipt)
         from app.services.ocr_outbox import enqueue_ocr_job

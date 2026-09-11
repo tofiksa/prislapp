@@ -31,6 +31,25 @@ Eksisterende v1-ruter kan fortsatt returnere FastAPI `detail` inntil de byttes; 
 
 Opplasting av kvitteringsbilde: like nøkkel og like fil-hash → én kvittering. Like nøkkel og ulik fil → 409.
 
+### Kvitteringsopplasting (v1 `POST /receipts`)
+
+Header `Idempotency-Key` er receipt-UUID. Payload-hash er SHA-256 av rå filbytes (hex 64), lagret på `receipts.payload_hash`.
+
+- Samme bruker, samme nøkkel, samme hash → 201 med original id/status. Ingen ny OCR-jobb hvis den allerede er queued/processing/done.
+- Samme nøkkel, annen fil → **409** `IDEMPOTENCY_CONFLICT` (C00). Originalen overskrives ikke.
+- Uten nøkkel: ny UUID som i dag. Hash lagres likevel.
+
+Låste filgrenser, sjekket **før** `create_receipt` / `job_outbox` / `process_receipt`. Ingen stille nedskalering:
+
+| Grense | Verdi | Feil |
+|---|---|---|
+| Rå fil | 20 MiB | 413 (eksisterende v1 `detail`) |
+| Dekodet piksler (bredde×høyde) | 40_000_000 | 413 `IMAGE_TOO_LARGE` (C00, `retryable=false`) |
+| Maks side | 12_000 px | 413 `IMAGE_DIMENSIONS` (C00, `retryable=false`) |
+| Format etter dekoding | JPEG, PNG | 400 v1 `Invalid image` |
+
+PDF/HTML/tom fil avvises som i dag (400). Nye 409/413-ruter bruker C00 `{code, message, field_errors, retryable, request_id}`. Ingen OCR-tekst i `message`.
+
 ## Paginering
 
 Cursor + stabil sekundærsortering på ID. Standard 50, maks 100.

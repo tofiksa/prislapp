@@ -49,6 +49,11 @@ class Receipt(Base):
     version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     image_path: Mapped[str] = mapped_column(String(512))
     image_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # SHA-256 av rå opplastingsbytes (hex 64). Null på rader fra før 011.
+    payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    image_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     raw_ocr_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

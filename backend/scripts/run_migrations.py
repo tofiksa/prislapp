@@ -327,6 +327,17 @@ SCHEMA_REVISIONS: tuple[SchemaRevision, ...] = (
             "users": ("deleted_at",),
         },
     ),
+    SchemaRevision(
+        "011",
+        {
+            "receipts": (
+                "payload_hash",
+                "image_width",
+                "image_height",
+                "content_type",
+            ),
+        },
+    ),
 )
 
 # Datamigreringer etterlater ingen skjemaspor. De kjøres på nytt etter stamping,
