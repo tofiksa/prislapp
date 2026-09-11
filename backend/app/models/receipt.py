@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, time
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, Time, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, Time, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -45,6 +45,8 @@ class Receipt(Base):
     )
     total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=ReceiptStatus.UPLOADED.value)
+    # Gjeldende bekreftede revisjonsnummer. 0 betyr ingen bekreftet revisjon.
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     image_path: Mapped[str] = mapped_column(String(512))
     image_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     raw_ocr_text: Mapped[str | None] = mapped_column(Text, nullable=True)

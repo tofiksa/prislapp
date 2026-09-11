@@ -30,6 +30,7 @@ class ApiError(Exception):
         message: str,
         field_errors: list[FieldError] | None = None,
         retryable: bool = False,
+        extra: dict[str, object] | None = None,
     ) -> None:
         super().__init__(code)
         self.status_code = status_code
@@ -37,6 +38,9 @@ class ApiError(Exception):
         self.message = message
         self.field_errors = field_errors or []
         self.retryable = retryable
+        # Trygge, maskinlesbare tillegg som `current_version`. Aldri OCR-tekst,
+        # ID-er, tokens eller stacktrace.
+        self.extra = extra or {}
 
 
 def not_found() -> ApiError:
@@ -69,5 +73,6 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
             ],
             "retryable": exc.retryable,
             "request_id": new_request_id(),
+            **exc.extra,
         },
     )
