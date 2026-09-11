@@ -21,10 +21,30 @@ class QueueDatabaseTest {
             old.version = 1
         }
         val db = Room.databaseBuilder(context, PrislappDatabase::class.java, name)
-            .addMigrations(no.prislapp.di.DatabaseModule.MIGRATION_1_2).build()
+            .addMigrations(
+                no.prislapp.di.DatabaseModule.MIGRATION_1_2,
+                no.prislapp.di.DatabaseModule.MIGRATION_2_3,
+            ).build()
         try {
             assertTrue(db.pendingReceiptDao().observeAll("new-user").first().isEmpty())
             assertEquals("/old.jpg", db.pendingReceiptDao().getById(1)?.imagePath)
+        } finally { db.close(); context.deleteDatabase(name) }
+    }
+
+    @Test fun shoppingListMigrationKeepsPendingReceipts() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val name = "migration-2-3-${System.nanoTime()}.db"
+        context.openOrCreateDatabase(name, 0, null).use { old ->
+            old.execSQL("CREATE TABLE pending_receipts (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, imagePath TEXT NOT NULL, serverReceiptId TEXT, status TEXT NOT NULL, createdAt INTEGER NOT NULL, userId TEXT NOT NULL, captureId TEXT NOT NULL)")
+            old.execSQL("INSERT INTO pending_receipts(imagePath,status,createdAt,userId,captureId) VALUES('/keep.jpg','PENDING',1,'a','cap-1')")
+            old.version = 2
+        }
+        val db = Room.databaseBuilder(context, PrislappDatabase::class.java, name)
+            .addMigrations(no.prislapp.di.DatabaseModule.MIGRATION_2_3).build()
+        try {
+            assertEquals("/keep.jpg", db.pendingReceiptDao().getById(1)?.imagePath)
+            assertEquals("a", db.pendingReceiptDao().getById(1)?.userId)
+            assertTrue(db.shoppingListDao().getAllForUser("a").isEmpty())
         } finally { db.close(); context.deleteDatabase(name) }
     }
 

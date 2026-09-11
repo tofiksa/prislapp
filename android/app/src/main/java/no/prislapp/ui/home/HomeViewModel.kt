@@ -9,17 +9,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import no.prislapp.data.repository.ReceiptRepository
+import no.prislapp.data.repository.ShoppingListRepository
 import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val receiptRepository: ReceiptRepository,
+    private val shoppingListRepository: ShoppingListRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
         receiptRepository.resumePendingWork()
+        shoppingListRepository.resumePendingWork()
         observePending()
         refreshServerReceipts()
     }
