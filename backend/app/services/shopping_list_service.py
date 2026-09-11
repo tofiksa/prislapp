@@ -438,6 +438,11 @@ class ShoppingListService:
                     conflicts.append(conflict)
         await self.db.commit()
 
+        # Sekvensen stemples før listene leses, ikke etter. Committer en annen
+        # enhet i mellomtiden, dekker markøren en endring klienten aldri fikk,
+        # og neste inkrementelle sync hopper over den for alltid. Motsatt vei
+        # er ufarlig: en endring som allerede er levert, leveres én gang til.
+        sequence = await self._sequence(user_id)
         full_snapshot = cursor.sequence is None
         lists = (
             await self._snapshot(user_id)
@@ -445,7 +450,7 @@ class ShoppingListService:
             else await self._delta(user_id, cursor.sequence)
         )
         return {
-            "cursor": encode_sync_cursor(user_id, await self._sequence(user_id)),
+            "cursor": encode_sync_cursor(user_id, sequence),
             "price_data_version": await self._price_data_version(user_id),
             "full_snapshot": full_snapshot,
             # Sammenslåing av private produkter kommer i S03-B.

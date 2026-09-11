@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account_ledger import AccountLedger
 from app.models.product import PriceObservation
 from app.models.receipt_revision import PriceObservationV2
-from app.models.shopping_list import ShoppingList, ShoppingListItem
+from app.models.shopping_list import ShoppingList, ShoppingListItem, ShoppingListStatus
 from app.models.user import User
 from app.models.user_product import IdentityStatus, UserProduct
-from app.services.shopping_list_service import encode_sync_cursor
+from app.services.shopping_list_service import ShoppingListService, encode_sync_cursor
 
 pytestmark = pytest.mark.asyncio
 
@@ -677,3 +677,75 @@ async def test_syncing_a_checked_line_creates_no_price_observation(
         select(AccountLedger.price_data_version).where(AccountLedger.user_id == user.id),
     )
     assert ledger == 1
+
+
+def _commit_from_another_device(monkeypatch, name: str) -> uuid.UUID:
+    """Lar en annen enhet committe rett etter at denne synken har lest listene.
+
+    Markøren som svaret bærer må derfor ikke dekke den sekvensen: den ble aldri
+    levert. Å levere for mye neste gang er ufarlig, å hoppe over er det ikke.
+    """
+    other_id = uuid.uuid4()
+    original = ShoppingListService._sync_lists
+    done = False
+
+    async def racing_sync_lists(self, user_id, changed_since):
+        nonlocal done
+        lists = await original(self, user_id, changed_since)
+        if not done:
+            done = True
+            sequence = await self._next_sequence(user_id)
+            now = datetime.now(timezone.utc)
+            self.db.add(
+                ShoppingList(
+                    id=other_id,
+                    user_id=user_id,
+                    name=name,
+                    status=ShoppingListStatus.ACTIVE.value,
+                    version=1,
+                    content_seq=sequence,
+                    created_at=now,
+                    updated_at=now,
+                ),
+            )
+            await self.db.commit()
+        return lists
+
+    monkeypatch.setattr(ShoppingListService, "_sync_lists", racing_sync_lists)
+    return other_id
+
+
+async def test_a_cursor_never_covers_a_change_the_client_did_not_get(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _, headers = await _register(client, db_session, "a@example.com")
+    await _new_list(client, headers)
+    cursor = (await _sync(client, headers))["cursor"]
+    other_id = _commit_from_another_device(monkeypatch, "Fra en annen enhet")
+
+    raced = await _sync(client, headers, cursor=cursor)
+    monkeypatch.undo()
+    body = await _sync(client, headers, cursor=raced["cursor"])
+
+    # Den andre enhetens liste kom ikke med i `raced`, så neste sync må ha den.
+    assert [item["id"] for item in raced["lists"]] == []
+    assert [item["id"] for item in body["lists"]] == [str(other_id)]
+
+
+async def test_a_full_snapshot_cursor_never_covers_an_undelivered_change(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _, headers = await _register(client, db_session, "a@example.com")
+    first = await _new_list(client, headers)
+    other_id = _commit_from_another_device(monkeypatch, "Fra en annen enhet")
+
+    snapshot = await _sync(client, headers)
+    monkeypatch.undo()
+    body = await _sync(client, headers, cursor=snapshot["cursor"])
+
+    assert [item["id"] for item in snapshot["lists"]] == [first]
+    assert [item["id"] for item in body["lists"]] == [str(other_id)]
