@@ -9,4 +9,7 @@ data class CachedUserProductEntity(
     @PrimaryKey val id: String,
     val userId: String,
     val displayName: String,
+    val packContent: String? = null,
+    val packUnit: String = "unknown",
+    val lastPurchasedAt: String? = null,
 )

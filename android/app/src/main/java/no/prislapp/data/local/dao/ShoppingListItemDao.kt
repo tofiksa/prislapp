@@ -26,4 +26,21 @@ interface ShoppingListItemDao {
 
     @Query("SELECT COALESCE(MAX(position), -1) FROM shopping_list_items WHERE listId = :listId AND userId = :userId AND deleted = 0")
     suspend fun maxPosition(listId: String, userId: String): Int
+
+    @Query(
+        """
+        SELECT * FROM shopping_list_items
+        WHERE listId = :listId AND userId = :userId
+          AND userProductId = :userProductId AND quantityUnit = :quantityUnit
+          AND checked = 0 AND deleted = 0
+        ORDER BY position ASC
+        LIMIT 1
+        """,
+    )
+    suspend fun findOpenProductLine(
+        listId: String,
+        userId: String,
+        userProductId: String,
+        quantityUnit: String,
+    ): ShoppingListItemEntity?
 }

@@ -67,6 +67,55 @@ class ShoppingListRepository @Inject constructor(
             if (user == null) flowOf(emptyList()) else conflictDao.observe(user)
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeRecentProducts(): Flow<List<CachedUserProductEntity>> =
+        accountSession.observeUserId().flatMapLatest { user ->
+            if (user == null) flowOf(emptyList()) else productCacheDao.observeForUser(user)
+        }
+
+    suspend fun refreshRecentProducts() {
+        val userId = requireUser()
+        val response = api.listMyProducts(sort = "recent")
+        transactionRunner.run {
+            for (product in response.items) {
+                productCacheDao.upsert(
+                    CachedUserProductEntity(
+                        id = product.id,
+                        userId = userId,
+                        displayName = product.display_name,
+                        packContent = product.pack_content,
+                        packUnit = product.pack_unit,
+                        lastPurchasedAt = product.last_purchased_at,
+                    ),
+                )
+            }
+        }
+    }
+
+    suspend fun addProductOrIncrement(
+        listId: String,
+        userProductId: String,
+        productDisplayName: String,
+        quantity: BigDecimal = BigDecimal.ONE,
+        quantityUnit: String = "each",
+    ): AddItemResult {
+        val userId = requireUser()
+        val existing = itemDao.findOpenProductLine(listId, userId, userProductId, quantityUnit)
+        if (existing != null) {
+            val previous = QuantityFormat.fromJson(existing.quantity)
+            setItemQuantity(listId, existing.id, previous + quantity)
+            return AddItemResult(itemId = existing.id, previousQuantity = previous)
+        }
+        val itemId = addItem(
+            listId = listId,
+            userProductId = userProductId,
+            productDisplayName = productDisplayName,
+            quantity = quantity,
+            quantityUnit = quantityUnit,
+        )
+        return AddItemResult(itemId = itemId)
+    }
+
     suspend fun createList(name: String): String {
         val userId = requireUser()
         val id = UUID.randomUUID().toString()
@@ -122,8 +171,16 @@ class ShoppingListRepository @Inject constructor(
                 ),
             )
             if (userProductId != null && productDisplayName != null) {
+                val cached = productCacheDao.get(userProductId, userId)
                 productCacheDao.upsert(
-                    CachedUserProductEntity(id = userProductId, userId = userId, displayName = productDisplayName),
+                    CachedUserProductEntity(
+                        id = userProductId,
+                        userId = userId,
+                        displayName = productDisplayName,
+                        packContent = cached?.packContent,
+                        packUnit = cached?.packUnit ?: quantityUnit,
+                        lastPurchasedAt = cached?.lastPurchasedAt,
+                    ),
                 )
             }
             outboxDao.upsert(

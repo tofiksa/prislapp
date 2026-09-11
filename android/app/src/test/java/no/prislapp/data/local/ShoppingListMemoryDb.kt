@@ -26,11 +26,13 @@ class ShoppingListMemoryDb {
     val listsFlow = MutableStateFlow<List<ShoppingListEntity>>(emptyList())
     val itemsFlow = MutableStateFlow<List<ShoppingListItemEntity>>(emptyList())
     val conflictsFlow = MutableStateFlow<List<SyncConflictEntity>>(emptyList())
+    val productsFlow = MutableStateFlow<List<CachedUserProductEntity>>(emptyList())
 
     fun publish() {
         listsFlow.value = lists.toList()
         itemsFlow.value = items.toList()
         conflictsFlow.value = conflicts.toList()
+        productsFlow.value = products.toList()
     }
 }
 
@@ -80,6 +82,18 @@ class FakeShoppingListItemDao(private val db: ShoppingListMemoryDb) : ShoppingLi
     override suspend fun maxPosition(listId: String, userId: String) =
         db.items.filter { it.listId == listId && it.userId == userId && !it.deleted }
             .maxOfOrNull { it.position } ?: -1
+
+    override suspend fun findOpenProductLine(
+        listId: String,
+        userId: String,
+        userProductId: String,
+        quantityUnit: String,
+    ) = db.items
+        .filter {
+            it.listId == listId && it.userId == userId && it.userProductId == userProductId &&
+                it.quantityUnit == quantityUnit && !it.checked && !it.deleted
+        }
+        .minByOrNull { it.position }
 }
 
 open class FakeMutationOutboxDao(private val db: ShoppingListMemoryDb) : MutationOutboxDao {
@@ -159,8 +173,16 @@ class FakeCachedUserProductDao(private val db: ShoppingListMemoryDb) : CachedUse
     override suspend fun upsert(entity: CachedUserProductEntity) {
         db.products.removeAll { it.id == entity.id }
         db.products.add(entity)
+        db.publish()
     }
 
     override suspend fun get(id: String, userId: String) =
         db.products.find { it.id == id && it.userId == userId }
+
+    override fun observeForUser(userId: String): Flow<List<CachedUserProductEntity>> =
+        db.productsFlow.map { rows ->
+            rows.filter { it.userId == userId }
+                .sortedWith(compareBy<CachedUserProductEntity> { it.lastPurchasedAt == null }
+                    .thenByDescending { it.lastPurchasedAt })
+        }
 }

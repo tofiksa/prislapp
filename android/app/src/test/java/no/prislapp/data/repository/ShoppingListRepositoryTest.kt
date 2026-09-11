@@ -22,6 +22,8 @@ import no.prislapp.data.remote.dto.ShoppingListItemDto
 import no.prislapp.data.remote.dto.SyncConflictDto
 import no.prislapp.data.remote.dto.SyncRequestDto
 import no.prislapp.data.remote.dto.SyncResponseDto
+import no.prislapp.data.remote.dto.UserProductListResponse
+import no.prislapp.data.remote.dto.UserProductResponse
 import no.prislapp.domain.QuantityFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -252,6 +254,90 @@ class ShoppingListRepositoryTest {
         )
         assertTrue(json.contains("\"quantity\":\"1.000\""))
         assertFalse(json.contains("\"quantity\":1"))
+    }
+
+    @Test
+    fun addProductOrIncrementMergesUncheckedSameProductAndUnit() = runTest {
+        val fixture = Fixture()
+        val repository = fixture.repository()
+        val listId = repository.createList("Tur")
+        val first = repository.addProductOrIncrement(listId, "prod-1", "Melk")
+        val second = repository.addProductOrIncrement(listId, "prod-1", "Melk")
+
+        assertEquals(first.itemId, second.itemId)
+        assertEquals(null, first.previousQuantity)
+        assertEquals(0, BigDecimal.ONE.compareTo(second.previousQuantity))
+        assertEquals("2.000", repository.getItem(first.itemId)?.quantity)
+        assertEquals(1, fixture.db.items.count { !it.deleted })
+    }
+
+    @Test
+    fun addProductOrIncrementDoesNotMergeFreeTextWithSameName() = runTest {
+        val fixture = Fixture()
+        val repository = fixture.repository()
+        val listId = repository.createList("Tur")
+        val free = repository.addItem(listId, freeText = "Melk")
+        val product = repository.addProductOrIncrement(listId, "prod-1", "Melk")
+
+        assertTrue(free != product.itemId)
+        assertEquals(2, fixture.db.items.count { !it.deleted })
+        assertEquals("Melk", repository.getItem(free)?.freeText)
+        assertEquals("prod-1", repository.getItem(product.itemId)?.userProductId)
+    }
+
+    @Test
+    fun addProductOrIncrementDoesNotMergeCheckedLine() = runTest {
+        val fixture = Fixture()
+        val repository = fixture.repository()
+        val listId = repository.createList("Tur")
+        val first = repository.addProductOrIncrement(listId, "prod-1", "Melk")
+        repository.setItemChecked(listId, first.itemId, true)
+        val second = repository.addProductOrIncrement(listId, "prod-1", "Melk")
+
+        assertTrue(first.itemId != second.itemId)
+        assertEquals(null, second.previousQuantity)
+        assertEquals(2, fixture.db.items.count { !it.deleted })
+    }
+
+    @Test
+    fun refreshRecentProductsCachesPackFieldsFromDecimalStrings() = runTest {
+        val fixture = Fixture()
+        val repository = fixture.repository()
+        coEvery { fixture.api.listMyProducts(sort = "recent") } returns UserProductListResponse(
+            items = listOf(
+                UserProductResponse(
+                    id = "prod-1",
+                    display_name = "Melk",
+                    pack_content = "1.000",
+                    pack_unit = "l",
+                    last_purchased_at = "2026-09-01",
+                    purchase_count = 3,
+                    version = 1,
+                    identity_status = "confirmed",
+                ),
+            ),
+        )
+
+        repository.refreshRecentProducts()
+
+        val cached = repository.observeRecentProducts().first().single()
+        assertEquals("Melk", cached.displayName)
+        assertEquals("1.000", cached.packContent)
+        assertEquals("l", cached.packUnit)
+        assertEquals("2026-09-01", cached.lastPurchasedAt)
+        val json = Gson().toJson(
+            UserProductResponse(
+                id = "prod-1",
+                display_name = "Melk",
+                pack_content = "1.000",
+                pack_unit = "l",
+                identity_status = "confirmed",
+                purchase_count = 3,
+                version = 1,
+            ),
+        )
+        assertTrue(json.contains("\"pack_content\":\"1.000\""))
+        assertFalse(json.contains("\"pack_content\":1"))
     }
 
     private class Fixture(

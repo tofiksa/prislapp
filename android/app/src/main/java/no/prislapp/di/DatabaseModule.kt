@@ -133,6 +133,14 @@ object DatabaseModule {
         }
     }
 
+    val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE cached_user_products ADD COLUMN packContent TEXT")
+            db.execSQL("ALTER TABLE cached_user_products ADD COLUMN packUnit TEXT NOT NULL DEFAULT 'unknown'")
+            db.execSQL("ALTER TABLE cached_user_products ADD COLUMN lastPurchasedAt TEXT")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): PrislappDatabase {
@@ -140,7 +148,7 @@ object DatabaseModule {
             context,
             PrislappDatabase::class.java,
             "prislapp.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
     }
 
     @Provides

@@ -20,6 +20,7 @@ import no.prislapp.data.remote.dto.StoreListResponse
 import no.prislapp.data.remote.dto.SyncRequestDto
 import no.prislapp.data.remote.dto.SyncResponseDto
 import no.prislapp.data.remote.dto.TokenResponse
+import no.prislapp.data.remote.dto.UserProductListResponse
 import no.prislapp.data.remote.dto.UserResponse
 import retrofit2.http.PATCH
 import okhttp3.MultipartBody
@@ -93,6 +94,14 @@ interface PrislappApi {
 
     @GET("stores")
     suspend fun listStores(): StoreListResponse
+
+    @GET("v2/me/products")
+    suspend fun listMyProducts(
+        @Query("q") query: String? = null,
+        @Query("sort") sort: String = "recent",
+        @Query("cursor") cursor: String? = null,
+        @Query("limit") limit: Int? = null,
+    ): UserProductListResponse
 
     @GET("v2/shopping-lists")
     suspend fun listShoppingLists(

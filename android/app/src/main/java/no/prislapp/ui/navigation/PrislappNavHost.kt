@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -37,6 +38,7 @@ import no.prislapp.ui.product.ProductPricesScreen
 import no.prislapp.ui.product.ProductSearchScreen
 import no.prislapp.ui.receipt.ReceiptProcessingScreen
 import no.prislapp.ui.receipt.ReceiptReviewScreen
+import no.prislapp.ui.shoppinglist.ShoppingListScreen
 
 private data class BottomTab(
     val route: String,
@@ -111,6 +113,9 @@ fun PrislappNavHost(
                     onLogout = { authViewModel.logout() },
                 )
             }
+            composable(Routes.SHOPPING_LIST) {
+                ShoppingListScreen()
+            }
             composable(Routes.CAMERA) {
                 CameraScreen(
                     onCaptured = { localId ->
@@ -180,6 +185,7 @@ private fun LoggedInBottomBar(
 ) {
     val tabs = listOf(
         BottomTab(Routes.HOME, Icons.Default.Home, R.string.nav_home),
+        BottomTab(Routes.SHOPPING_LIST, Icons.Default.ShoppingCart, R.string.nav_shopping_list),
         BottomTab(Routes.HISTORY, Icons.AutoMirrored.Filled.ReceiptLong, R.string.nav_history),
         BottomTab(Routes.PRODUCT_SEARCH, Icons.Default.Search, R.string.nav_search),
     )

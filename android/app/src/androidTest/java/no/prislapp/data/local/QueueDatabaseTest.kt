@@ -24,6 +24,7 @@ class QueueDatabaseTest {
             .addMigrations(
                 no.prislapp.di.DatabaseModule.MIGRATION_1_2,
                 no.prislapp.di.DatabaseModule.MIGRATION_2_3,
+                no.prislapp.di.DatabaseModule.MIGRATION_3_4,
             ).build()
         try {
             assertTrue(db.pendingReceiptDao().observeAll("new-user").first().isEmpty())
@@ -40,7 +41,10 @@ class QueueDatabaseTest {
             old.version = 2
         }
         val db = Room.databaseBuilder(context, PrislappDatabase::class.java, name)
-            .addMigrations(no.prislapp.di.DatabaseModule.MIGRATION_2_3).build()
+            .addMigrations(
+                no.prislapp.di.DatabaseModule.MIGRATION_2_3,
+                no.prislapp.di.DatabaseModule.MIGRATION_3_4,
+            ).build()
         try {
             assertEquals("/keep.jpg", db.pendingReceiptDao().getById(1)?.imagePath)
             assertEquals("a", db.pendingReceiptDao().getById(1)?.userId)
