@@ -302,10 +302,223 @@ async def test_deleted_account_fence_drops_ocr_result(db_session: AsyncSession):
     assert updated is not None
     assert updated.status != ReceiptStatus.READY_FOR_REVIEW.value
     jobs = await _outbox_for(db_session, receipt.id)
+    assert len(jobs) == 1
     assert jobs[0].status == JobOutboxStatus.FAILED_PERMANENT.value
+    assert jobs[0].last_error_code == "ACCOUNT_DELETED"
 
     observations = await db_session.execute(select(PriceObservation))
     assert observations.scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_complete_ocr_locks_deleted_user_for_update(db_session: AsyncSession):
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    from app.models.store import Store
+    from app.services.ocr_outbox import claim_ocr_job, complete_ocr_result
+
+    user = User(email="lock-ocr@example.com", password_hash="hash")
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    service = ReceiptService(db_session)
+    receipt = await service.create_receipt(user, b"image-bytes", "image/jpeg")
+    claimed = await claim_ocr_job(db_session, receipt.id)
+    assert claimed is not None
+
+    user.deleted_at = datetime.now(timezone.utc)
+    await db_session.commit()
+
+    statements = []
+
+    def capture(execute_state):
+        statements.append(execute_state.statement)
+
+    event.listen(Session, "do_orm_execute", capture)
+    try:
+        wrote = await complete_ocr_result(
+            db_session,
+            receipt.id,
+            claimed.attempt_id,
+            REMA1000_SAMPLE_OCR,
+            None,
+            None,
+            None,
+            [
+                {
+                    "raw_product_name": "Melk",
+                    "quantity": 1,
+                    "unit_price": None,
+                    "line_total": 10,
+                }
+            ],
+            store_name="REMA 1000",
+            store_chain="rema1000",
+        )
+    finally:
+        event.remove(Session, "do_orm_execute", capture)
+
+    assert wrote is False
+    user_locks = [
+        stmt
+        for stmt in statements
+        if "users" in str(stmt).lower() and getattr(stmt, "_for_update_arg", None) is not None
+    ]
+    assert user_locks
+
+    jobs = await _outbox_for(db_session, receipt.id)
+    assert len(jobs) == 1
+    assert jobs[0].status == "failed_permanent"
+    assert jobs[0].last_error_code == "ACCOUNT_DELETED"
+    stores = (await db_session.execute(select(Store))).scalars().all()
+    assert stores == []
+
+
+@pytest.mark.asyncio
+async def test_claim_ocr_locks_user_for_update(db_session: AsyncSession):
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    from app.services.ocr_outbox import claim_ocr_job
+
+    user = User(email="lock-claim@example.com", password_hash="hash")
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    service = ReceiptService(db_session)
+    receipt = await service.create_receipt(user, b"image-bytes", "image/jpeg")
+
+    statements = []
+
+    def capture(execute_state):
+        statements.append(execute_state.statement)
+
+    event.listen(Session, "do_orm_execute", capture)
+    try:
+        claimed = await claim_ocr_job(db_session, receipt.id)
+    finally:
+        event.remove(Session, "do_orm_execute", capture)
+
+    assert claimed is not None
+    user_locks = [
+        stmt
+        for stmt in statements
+        if "users" in str(stmt).lower() and getattr(stmt, "_for_update_arg", None) is not None
+    ]
+    assert user_locks
+
+
+@pytest.mark.asyncio
+async def test_worker_does_not_reenqueue_ocr_after_account_deleted(
+    db_session: AsyncSession,
+):
+    from app.models.job_outbox import JobOutboxStatus
+    from app.models.store import Store
+    from app.worker.tasks import process_receipt_with_db
+
+    user = User(email="deleted-worker@example.com", password_hash="hash")
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    service = ReceiptService(db_session)
+    receipt = await service.create_receipt(user, b"image-bytes", "image/jpeg")
+    user.deleted_at = datetime.now(timezone.utc)
+    await db_session.commit()
+
+    with (
+        patch("app.worker.tasks.StorageService") as mock_storage_cls,
+        patch("app.worker.tasks.OcrService") as mock_ocr_cls,
+        patch.object(ReceiptService, "get_or_create_store") as mock_store,
+    ):
+        mock_storage_cls.return_value.download_receipt.return_value = b"fake-image-bytes"
+        mock_ocr_cls.return_value.extract_text.return_value = REMA1000_SAMPLE_OCR
+        await process_receipt_with_db(str(receipt.id), db_session)
+
+    mock_ocr_cls.return_value.extract_text.assert_not_called()
+    mock_store.assert_not_called()
+
+    jobs = await _outbox_for(db_session, receipt.id)
+    assert len(jobs) == 1
+    assert jobs[0].status == JobOutboxStatus.FAILED_PERMANENT.value
+    assert jobs[0].last_error_code == "ACCOUNT_DELETED"
+
+    stored = await db_session.get(Receipt, receipt.id)
+    assert stored is not None
+    assert stored.status != ReceiptStatus.READY_FOR_REVIEW.value
+
+    stores = (await db_session.execute(select(Store))).scalars().all()
+    assert stores == []
+    observations = (await db_session.execute(select(PriceObservation))).scalars().all()
+    assert observations == []
+
+
+@pytest.mark.asyncio
+async def test_complete_after_delete_does_not_create_store_or_enqueue(
+    db_session: AsyncSession,
+):
+    from app.models.job_outbox import JobOutboxStatus
+    from app.models.store import Store
+    from app.services.ocr_outbox import claim_ocr_job, complete_ocr_result
+    from app.worker.tasks import process_receipt_with_db
+
+    user = User(email="deleted-mid-ocr@example.com", password_hash="hash")
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    service = ReceiptService(db_session)
+    receipt = await service.create_receipt(user, b"image-bytes", "image/jpeg")
+    claimed = await claim_ocr_job(db_session, receipt.id)
+    assert claimed is not None
+
+    user.deleted_at = datetime.now(timezone.utc)
+    await db_session.commit()
+
+    wrote = await complete_ocr_result(
+        db_session,
+        receipt.id,
+        claimed.attempt_id,
+        REMA1000_SAMPLE_OCR,
+        None,
+        None,
+        None,
+        [
+            {
+                "raw_product_name": "Melk",
+                "quantity": 1,
+                "unit_price": None,
+                "line_total": 10,
+            }
+        ],
+        store_name="REMA 1000",
+        store_chain="rema1000",
+    )
+    assert wrote is False
+
+    with (
+        patch("app.worker.tasks.StorageService"),
+        patch("app.worker.tasks.OcrService") as mock_ocr_cls,
+    ):
+        mock_ocr_cls.return_value.extract_text.return_value = REMA1000_SAMPLE_OCR
+        await process_receipt_with_db(str(receipt.id), db_session)
+
+    mock_ocr_cls.return_value.extract_text.assert_not_called()
+    jobs = await _outbox_for(db_session, receipt.id)
+    assert len(jobs) == 1
+    assert jobs[0].status == JobOutboxStatus.FAILED_PERMANENT.value
+    assert jobs[0].last_error_code == "ACCOUNT_DELETED"
+
+    stored = await db_session.get(Receipt, receipt.id)
+    assert stored is not None
+    assert stored.status != ReceiptStatus.READY_FOR_REVIEW.value
+    stores = (await db_session.execute(select(Store))).scalars().all()
+    assert stores == []
+    observations = (await db_session.execute(select(PriceObservation))).scalars().all()
+    assert observations == []
 
 
 @pytest.mark.asyncio

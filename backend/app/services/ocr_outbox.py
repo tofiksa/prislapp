@@ -149,7 +149,7 @@ async def claim_ocr_job(
     ):
         return None
 
-    user = await db.get(User, job.user_id)
+    user = await _lock_user(db, job.user_id)
     if user is None or user.deleted_at is not None:
         job.status = JobOutboxStatus.FAILED_PERMANENT.value
         job.last_error_code = "ACCOUNT_DELETED"
@@ -200,20 +200,27 @@ async def complete_ocr_result(
     purchase_date: datetime | None,
     total: Decimal | None,
     items: list[dict],
+    *,
+    store_name: str | None = None,
+    store_chain: str | None = None,
 ) -> bool:
     job = await _lock_active_job(db, receipt_id)
     if job is None or job.attempt_id != attempt_id:
         return False
 
-    user = await db.get(User, job.user_id)
+    user = await _lock_user(db, job.user_id)
     if user is None or user.deleted_at is not None:
         job.status = JobOutboxStatus.FAILED_PERMANENT.value
         job.last_error_code = "ACCOUNT_DELETED"
         await db.commit()
         return False
 
+    service = ReceiptService(db)
+    if store is None and store_name:
+        store = await service.get_or_create_store(store_name, store_chain)
+
     job.status = JobOutboxStatus.DONE.value
-    await ReceiptService(db).save_parsed_receipt(
+    await service.save_parsed_receipt(
         receipt_id,
         raw_ocr_text,
         store,
@@ -297,5 +304,15 @@ async def _lock_active_job(db: AsyncSession, receipt_id: uuid.UUID) -> JobOutbox
             JobOutbox.status.notin_(_TERMINAL),
         )
         .with_for_update(),
+    )
+    return result.scalar_one_or_none()
+
+
+async def _lock_user(db: AsyncSession, user_id: uuid.UUID) -> User | None:
+    result = await db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True),
     )
     return result.scalar_one_or_none()

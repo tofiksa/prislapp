@@ -1,6 +1,7 @@
 import uuid
 import logging
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal, engine
@@ -35,10 +36,12 @@ async def process_receipt_with_db(receipt_id: str, db: AsyncSession) -> None:
     receipt_uuid = uuid.UUID(receipt_id)
     claimed = await claim_ocr_job(db, receipt_uuid)
     if claimed is None:
-        from app.models.receipt import Receipt, ReceiptStatus
+        if not await _should_enqueue_missing_ocr_job(db, receipt_uuid):
+            return
+        from app.models.receipt import Receipt
 
         receipt = await db.get(Receipt, receipt_uuid)
-        if receipt is None or receipt.status != ReceiptStatus.UPLOADED.value:
+        if receipt is None:
             return
         await enqueue_ocr_job(db, receipt.user_id, receipt.id)
         await db.commit()
@@ -46,7 +49,6 @@ async def process_receipt_with_db(receipt_id: str, db: AsyncSession) -> None:
         if claimed is None:
             return
 
-    service = ReceiptService(db)
     try:
         storage = StorageService()
         image_bytes = storage.download_receipt(claimed.image_path)
@@ -54,10 +56,6 @@ async def process_receipt_with_db(receipt_id: str, db: AsyncSession) -> None:
         if not raw_text.strip():
             raise ValueError("No readable text in receipt image")
         parsed = parse_receipt_text(raw_text)
-
-        store = None
-        if parsed.store_name:
-            store = await service.get_or_create_store(parsed.store_name, parsed.store_chain)
 
         items = [
             {
@@ -74,10 +72,12 @@ async def process_receipt_with_db(receipt_id: str, db: AsyncSession) -> None:
             receipt_uuid,
             claimed.attempt_id,
             raw_text,
-            store,
+            None,
             parsed.purchase_date,
             parsed.total,
             items,
+            store_name=parsed.store_name,
+            store_chain=parsed.store_chain,
         )
     except Exception as exc:
         logging.getLogger(__name__).exception("Receipt processing failed: %s", receipt_uuid)
@@ -89,6 +89,32 @@ async def process_receipt_with_db(receipt_id: str, db: AsyncSession) -> None:
             _error_code(exc),
             permanent=_is_permanent_ocr_error(exc),
         )
+
+
+async def _should_enqueue_missing_ocr_job(db: AsyncSession, receipt_id: uuid.UUID) -> bool:
+    from app.models.job_outbox import JobOutbox, JobOutboxStatus
+    from app.models.receipt import Receipt, ReceiptStatus
+    from app.models.user import User
+
+    receipt = await db.get(Receipt, receipt_id)
+    if receipt is None or receipt.status != ReceiptStatus.UPLOADED.value:
+        return False
+    user = await db.get(User, receipt.user_id)
+    if user is None or user.deleted_at is not None:
+        return False
+    existing = await db.execute(
+        select(JobOutbox).where(JobOutbox.aggregate_id == receipt_id),
+    )
+    jobs = list(existing.scalars().all())
+    if any(
+        job.status == JobOutboxStatus.FAILED_PERMANENT.value
+        or job.last_error_code == "ACCOUNT_DELETED"
+        for job in jobs
+    ):
+        return False
+    if jobs:
+        return False
+    return True
 
 
 async def _process_receipt_async(receipt_id: str) -> None:

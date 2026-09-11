@@ -8,8 +8,9 @@ P0 skal **ikke** kjøre destruktiv migrering. Rå kjøpsgrunnlag går ikke tapt.
 2. **006 (S04-A):** Kolonner på kvittering/linje for `date_precision`, `date_source`, `purchase_time`, `line_type`, `net_line_total`, `printed_unit_price`, `quantity_unit`, `price_basis`, `condition`. Eksisterende `unit_price` / `line_total` beholdes. Ukjente verdier settes til `unknown`, aldri gjettet enhet.
 3. **007 (S05-A):** `receipt_revisions`, stabile linje-ID-er, `version` på kvittering. Bekreftede kvitteringer får revisjon 1 som gjeldende. `PUT /receipts/{id}/confirm` skriver fortsatt v1-form inntil klienten bytter.
 4. **008 (S06-A):** `shopping_lists`, `shopping_list_items`, `mutations`, tombstones.
-5. **009 (S10-B):** `outbox` for OCR-jobber. Eksisterende Celery-kø drains parallelt.
-6. **010 (S09-C):** `account_deletions`, `exports`, retention-felter. Slettemarkør før fysisk sletting.
+5. **009 (S09-A):** Auth-sesjoner (`refresh_sessions`, `password_reset_tokens`). Allerede levert.
+6. **010 (S10-B):** `job_outbox` for OCR-jobber og `users.deleted_at` som slettingsgjerde. Eksisterende Celery-kø drains parallelt.
+7. **011 (S09-C):** `account_deletions`, `exports`, retention-felter. Slettemarkør før fysisk sletting.
 
 Hver migrering har `upgrade` og dokumentert `downgrade` eller forward-fix. Indekser: `(user_id, …)` på alle private tabeller, unik `(user_id, mutation_id, operation)`.
 
