@@ -306,6 +306,27 @@ SCHEMA_REVISIONS: tuple[SchemaRevision, ...] = (
             ),
         },
     ),
+    SchemaRevision(
+        "010",
+        {
+            "job_outbox": (
+                "id",
+                "user_id",
+                "aggregate_type",
+                "aggregate_id",
+                "job_type",
+                "payload",
+                "status",
+                "attempt_id",
+                "lease_expires_at",
+                "attempt_count",
+                "last_error_code",
+                "created_at",
+                "published_at",
+            ),
+            "users": ("deleted_at",),
+        },
+    ),
 )
 
 # Datamigreringer etterlater ingen skjemaspor. De kjøres på nytt etter stamping,

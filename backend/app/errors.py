@@ -63,6 +63,15 @@ def unauthenticated() -> ApiError:
     return ApiError(401, "UNAUTHENTICATED", "Du er ikke innlogget.")
 
 
+def not_ready() -> ApiError:
+    return ApiError(
+        503,
+        "NOT_READY",
+        "Tjenesten er ikke klar.",
+        retryable=True,
+    )
+
+
 def email_not_verified() -> ApiError:
     return ApiError(401, "EMAIL_NOT_VERIFIED", "E-postadressen er ikke bekreftet.")
 

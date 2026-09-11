@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     receipt_image_retention_days: int = 30
     celery_task_always_eager: bool = False
+    outbox_reconcile_min_age_seconds: int = 5
+    outbox_lease_seconds: int = 300
+    outbox_max_attempts: int = 5
+    ready_stale_pending_seconds: int = 60
 
     @model_validator(mode="after")
     def reject_insecure_jwt_secret_in_production(self) -> "Settings":

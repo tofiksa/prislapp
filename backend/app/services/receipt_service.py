@@ -44,6 +44,9 @@ class ReceiptService:
             + timedelta(days=settings.receipt_image_retention_days),
         )
         self.db.add(receipt)
+        from app.services.ocr_outbox import enqueue_ocr_job
+
+        await enqueue_ocr_job(self.db, user.id, receipt.id)
         await self.db.commit()
         await self.db.refresh(receipt)
         return receipt

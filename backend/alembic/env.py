@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import Base
 from app.models import (  # noqa: F401
     AccountLedger,
+    JobOutbox,
     PasswordResetToken,
     PriceObservation,
     Product,

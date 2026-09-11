@@ -18,7 +18,7 @@ from tests.test_phase23 import image_bytes
 def mock_storage_and_celery():
     with (
         patch("app.services.receipt_service.StorageService") as mock_storage_cls,
-        patch("app.routers.receipts.process_receipt") as mock_task,
+        patch("app.services.ocr_outbox.deliver_ocr_job") as mock_task,
         patch("app.worker.tasks.StorageService") as mock_worker_storage_cls,
     ):
         mock_storage = MagicMock()
@@ -26,7 +26,6 @@ def mock_storage_and_celery():
         mock_storage.download_receipt.return_value = b"fake-image-bytes"
         mock_storage_cls.return_value = mock_storage
         mock_worker_storage_cls.return_value = mock_storage
-        mock_task.delay = MagicMock()
         yield mock_task
 
 

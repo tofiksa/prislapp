@@ -21,9 +21,9 @@ from app.schemas.receipt import (
     ReceiptUploadResponse,
     StoreResponse,
 )
+from app.services.ocr_outbox import enqueue_ocr_job, publish_pending_for_receipt
 from app.services.receipt_service import ReceiptService
 from app.services.storage_service import StorageService
-from app.worker.tasks import process_receipt
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
 
@@ -104,7 +104,9 @@ async def upload_receipt(
             if existing.user_id != current_user.id:
                 raise HTTPException(status_code=409, detail="Capture ID already used")
             if existing.status == ReceiptStatus.UPLOADED.value:
-                await run_in_threadpool(process_receipt.delay, str(existing.id))
+                await enqueue_ocr_job(db, current_user.id, existing.id)
+                await db.commit()
+                await publish_pending_for_receipt(db, existing.id)
             return ReceiptUploadResponse(id=str(existing.id), status=existing.status)
     receipt = await service.create_receipt(
         current_user,
@@ -112,7 +114,7 @@ async def upload_receipt(
         file.content_type or "image/jpeg",
         receipt_id=idempotency_key,
     )
-    await run_in_threadpool(process_receipt.delay, str(receipt.id))
+    await publish_pending_for_receipt(db, receipt.id)
 
     return ReceiptUploadResponse(id=str(receipt.id), status=receipt.status)
 
@@ -230,6 +232,7 @@ async def retry_receipt(
     if not receipt.image_path or expires <= datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="Original image expired; capture it again")
     receipt.status = ReceiptStatus.UPLOADED.value
+    await enqueue_ocr_job(db, current_user.id, receipt.id)
     await db.commit()
-    await run_in_threadpool(process_receipt.delay, str(receipt.id))
+    await publish_pending_for_receipt(db, receipt.id)
     return ReceiptUploadResponse(id=str(receipt.id), status=receipt.status)
