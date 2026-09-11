@@ -15,6 +15,7 @@ import no.prislapp.data.local.entity.PendingReceiptEntity
 import no.prislapp.data.remote.dto.ReceiptConfirmItemRequest
 import no.prislapp.data.remote.dto.ReceiptConfirmRequest
 import no.prislapp.data.remote.dto.ReceiptDetailResponse
+import no.prislapp.BuildConfig
 import no.prislapp.data.repository.ReceiptRepository
 import java.math.BigDecimal
 import java.util.UUID
@@ -142,6 +143,8 @@ data class ReceiptReviewUiState(
     val rawOcrText: String = "",
     val status: String = "",
     val isDeleted: Boolean = false,
+    val localImagePath: String? = null,
+    val imageUrl: String? = null,
 )
 
 @HiltViewModel
@@ -163,7 +166,18 @@ class ReceiptReviewViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val receipt = receiptRepository.getReceiptDetail(receiptId)
-                _uiState.update { it.copy(isLoading = false, isReadOnly = receipt.status != "READY_FOR_REVIEW", status = receipt.status) }
+                val localImagePath = receiptRepository.getPendingReceiptByServerId(receiptId)
+                    ?.imagePath
+                    ?.takeIf { java.io.File(it).exists() }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isReadOnly = receipt.status != "READY_FOR_REVIEW",
+                        status = receipt.status,
+                        localImagePath = localImagePath,
+                        imageUrl = BuildConfig.API_BASE_URL + "receipts/$receiptId/image",
+                    )
+                }
                 applyReceipt(receipt)
             } catch (e: Exception) {
                 _uiState.update {

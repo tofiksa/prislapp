@@ -1,8 +1,11 @@
 package no.prislapp.di
 
+import android.content.Context
+import coil.ImageLoader
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import no.prislapp.BuildConfig
 import no.prislapp.data.remote.AuthInterceptor
@@ -30,6 +33,11 @@ object NetworkModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
     }
+
+    @Provides
+    @Singleton
+    fun provideImageLoader(@ApplicationContext context: Context, client: OkHttpClient): ImageLoader =
+        ImageLoader.Builder(context).okHttpClient(client).build()
 
     @Provides
     @Singleton

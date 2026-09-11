@@ -14,14 +14,17 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -31,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -41,11 +45,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.suspendCancellableCoroutine
 import no.prislapp.R
+import no.prislapp.ui.components.PrislappTopBar
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraScreen(
     onCaptured: (localId: Long) -> Unit,
@@ -84,8 +88,10 @@ fun CameraScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.camera_title)) },
-                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
+            PrislappTopBar(
+                title = stringResource(R.string.camera_title),
+                onBack = onBack,
+            )
         },
     ) { padding ->
         Box(
@@ -117,7 +123,7 @@ fun CameraScreen(
             }
 
             if (!uiState.isSaving) {
-                OutlinedButton(
+                IconButton(
                     onClick = {
                         galleryLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -127,7 +133,10 @@ fun CameraScreen(
                         .align(Alignment.BottomStart)
                         .padding(24.dp),
                 ) {
-                    Text(stringResource(R.string.pick_from_gallery))
+                    Icon(
+                        imageVector = Icons.Default.PhotoLibrary,
+                        contentDescription = stringResource(R.string.pick_from_gallery),
+                    )
                 }
             }
 
@@ -200,8 +209,14 @@ private fun CameraPreviewContent(
             factory = { previewView },
             modifier = Modifier.fillMaxSize(),
         )
-        Text(stringResource(R.string.camera_guidance), modifier = Modifier.align(Alignment.TopCenter).padding(16.dp))
-        Button(
+        Text(
+            text = stringResource(R.string.camera_guidance),
+            color = Color.White,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(16.dp),
+        )
+        FilledIconButton(
             enabled = !capturing && provider != null,
             onClick = {
                 capturing = true
@@ -227,9 +242,14 @@ private fun CameraPreviewContent(
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(24.dp),
+                .padding(24.dp)
+                .size(72.dp),
         ) {
-            Text(stringResource(R.string.capture_button))
+            Icon(
+                imageVector = Icons.Default.CameraAlt,
+                contentDescription = stringResource(R.string.capture_button),
+                tint = Color.White,
+            )
         }
     }
 }

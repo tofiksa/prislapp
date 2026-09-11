@@ -1,7 +1,8 @@
 package no.prislapp.ui.history
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,11 +15,9 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.prislapp.R
+import no.prislapp.ui.components.EmptyState
+import no.prislapp.ui.components.PrislappTopBar
+import no.prislapp.ui.components.ReceiptRow
+import no.prislapp.ui.components.formatReceiptSubtitle
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -40,11 +43,11 @@ private enum class ActiveDatePicker {
     TO,
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun HistoryScreen(
     onOpenReceipt: (receiptId: String) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     viewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -86,8 +89,10 @@ fun HistoryScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.history_title)) },
-                navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
+            PrislappTopBar(
+                title = stringResource(R.string.history_title),
+                onBack = onBack,
+            )
         },
     ) { padding ->
         LazyColumn(
@@ -108,7 +113,7 @@ fun HistoryScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OutlinedButton(
+                    TextButton(
                         onClick = { activeDatePicker = ActiveDatePicker.FROM },
                         modifier = Modifier.weight(1f),
                     ) {
@@ -116,7 +121,7 @@ fun HistoryScreen(
                             uiState.fromDateLabel ?: stringResource(R.string.from_date),
                         )
                     }
-                    OutlinedButton(
+                    TextButton(
                         onClick = { activeDatePicker = ActiveDatePicker.TO },
                         modifier = Modifier.weight(1f),
                     ) {
@@ -128,7 +133,7 @@ fun HistoryScreen(
             }
             if (uiState.hasDateFilter) {
                 item {
-                    OutlinedButton(onClick = viewModel::clearDateFilter) {
+                    TextButton(onClick = viewModel::clearDateFilter) {
                         Text(stringResource(R.string.clear_date_filter))
                     }
                 }
@@ -143,7 +148,10 @@ fun HistoryScreen(
                     )
                 }
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         FilterChip(
                             selected = uiState.selectedStoreId == null,
                             onClick = { viewModel.selectStore(null) },
@@ -164,20 +172,21 @@ fun HistoryScreen(
                 item { CircularProgressIndicator() }
             }
             if (!uiState.isLoading && uiState.receipts.isEmpty()) {
-                item { Text(stringResource(R.string.no_receipts)) }
+                item {
+                    EmptyState(
+                        title = stringResource(R.string.history_empty_title),
+                        body = stringResource(R.string.history_empty_body),
+                    )
+                }
             }
 
             items(uiState.receipts, key = { it.id }) { receipt ->
-                OutlinedButton(
+                ReceiptRow(
+                    title = receipt.store?.name ?: stringResource(R.string.unknown_store),
+                    subtitle = formatReceiptSubtitle(receipt.purchase_date, receipt.total),
+                    statusLabel = null,
                     onClick = { onOpenReceipt(receipt.id) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    val storeName = receipt.store?.name ?: stringResource(R.string.unknown_store)
-                    val total = receipt.total?.toPlainString() ?: "?"
-                    val dateLabel = receipt.purchase_date?.take(10).orEmpty()
-                    val suffix = if (dateLabel.isNotEmpty()) " ($dateLabel)" else ""
-                    Text("$storeName – $total kr$suffix")
-                }
+                )
             }
 
             uiState.error?.let { error ->
@@ -187,10 +196,10 @@ fun HistoryScreen(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                item { OutlinedButton(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } }
+                item { TextButton(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } }
             }
             if (uiState.hasMore) {
-                item { OutlinedButton(onClick = viewModel::loadMore, enabled = !uiState.isLoading) {
+                item { TextButton(onClick = viewModel::loadMore, enabled = !uiState.isLoading) {
                     Text(stringResource(R.string.load_more))
                 } }
             }

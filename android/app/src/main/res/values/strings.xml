@@ -19,8 +19,7 @@
     <string name="camera_permission">Gi kameratilgang</string>
     <string name="capture_button">Ta bilde</string>
     <string name="pick_from_gallery">Velg fra galleri</string>
-    <string name="processing_title">Behandler kvittering</string>
-    <string name="processing_status">Status: %1$s</string>
+    <string name="processing_title">Leser kvitteringen</string>
     <string name="review_title">Gjennomgå kvittering</string>
     <string name="unknown_store">Ukjent butikk</string>
     <string name="receipt_total">Total: %1$s kr</string>
@@ -47,7 +46,6 @@
     <string name="all_stores">Alle butikker</string>
     <string name="product_search_title">Produktsøk</string>
     <string name="search_products">Søk etter produkt</string>
-    <string name="search_button">Søk</string>
     <string name="cheapest_for_me_title">Billigst for meg</string>
     <string name="cheapest_price">Billigst hos %1$s: %2$s kr</string>
     <string name="all_observations">Alle observasjoner</string>
@@ -64,4 +62,29 @@
     <string name="latest_store_prices">Siste pris per butikk</string>
     <string name="price_per_unit">Pris per stk / kg etter rabatt, basert på dine bekreftede kvitteringer.</string>
     <string name="camera_guidance">Hold hele kvitteringen rett og godt belyst</string>
+    <string name="status_pending">Venter på opplasting</string>
+    <string name="status_uploading">Laster opp…</string>
+    <string name="status_uploaded">Lastet opp</string>
+    <string name="status_processing">Leser kvitteringen…</string>
+    <string name="status_ready">Klar til gjennomgang</string>
+    <string name="status_failed">Kunne ikke leses</string>
+    <string name="status_confirmed">Bekreftet</string>
+    <string name="status_unknown">%1$s</string>
+    <string name="queued_receipt">Kvittering</string>
+    <string name="home_empty_title">Ingen kvitteringer ennå</string>
+    <string name="home_empty_body">Ta bilde av en handlelapp for å lagre priser og se hvor du har handlet billigst.</string>
+    <string name="history_empty_title">Ingen kvitteringer</string>
+    <string name="history_empty_body">Bekreftede kvitteringer vises her.</string>
+    <string name="nav_home">Hjem</string>
+    <string name="nav_history">Historikk</string>
+    <string name="nav_search">Søk</string>
+    <string name="account_menu">Konto</string>
+    <string name="processing_body_upload">Kvitteringen lastes opp. Du kan lukke denne skjermen — vi fortsetter i bakgrunnen.</string>
+    <string name="processing_body_ocr">Vi henter butikk, dato og varer. Dette tar vanligvis under et minutt.</string>
+    <string name="processing_body_failed">Vi fikk ikke lest kvitteringen. Prøv igjen, eller ta et nytt bilde med bedre lys.</string>
+    <string name="image_unavailable">Kvitteringsbildet er ikke tilgjengelig.</string>
+    <string name="show_ocr">Vis gjenkjent tekst</string>
+    <string name="hide_ocr">Skjul gjenkjent tekst</string>
+    <string name="cancel">Avbryt</string>
+    <string name="no_price_observations">Ingen prisobservasjoner ennå.</string>
 </resources>

@@ -54,6 +54,11 @@ class ReceiptRepository @Inject constructor(
         return pendingReceiptDao.getById(id)?.takeIf { it.userId == tokenStore.getUserId() }
     }
 
+    suspend fun getPendingReceiptByServerId(serverReceiptId: String): PendingReceiptEntity? {
+        return pendingReceiptDao.getByServerReceiptId(serverReceiptId)
+            ?.takeIf { it.userId == tokenStore.getUserId() }
+    }
+
     suspend fun getReceiptDetail(receiptId: String): ReceiptDetailResponse {
         return api.getReceipt(receiptId)
     }

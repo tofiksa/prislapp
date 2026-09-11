@@ -27,17 +27,18 @@ class AuthNavigationTest {
         compose.onNodeWithText("E-post").performTextInput(email)
         compose.onNodeWithText("Passord").performTextInput("TestPass123!")
         compose.onAllNodesWithText("Logg inn").filterToOne(hasClickAction()).performClick()
-        compose.waitUntil(15_000) { compose.onAllNodesWithText("Logg ut").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithContentDescription("Ta bilde av kvittering").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Historikk").performClick()
-        compose.onNodeWithText("Tilbake").performClick()
-        compose.onNodeWithText("Produktsøk").performClick()
-        compose.onNodeWithText("Søk etter produkt").performTextInput("melk")
         compose.onNodeWithText("Søk").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("melk")
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("Ingen produkter funnet i dine bekreftede kvitteringer").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Tilbake").performClick()
-        compose.onNodeWithText("Logg ut").performScrollTo().performClick()
+        compose.onNodeWithText("Hjem").performClick()
+        compose.onNodeWithContentDescription("Konto").performClick()
+        compose.onNodeWithText("Logg ut").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Passord").fetchSemanticsNodes().isNotEmpty() }
     }
 }
