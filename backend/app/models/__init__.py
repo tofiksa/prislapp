@@ -11,6 +11,14 @@ from app.models.receipt_revision import (
     ReconciliationStatus,
     RevisionStatus,
 )
+from app.models.shopping_list import (
+    ShoppingList,
+    ShoppingListItem,
+    ShoppingListMutation,
+    ShoppingListOperation,
+    ShoppingListStatus,
+    ShoppingListSyncState,
+)
 from app.models.store import Store
 from app.models.user import User
 from app.models.user_product import (
@@ -39,6 +47,12 @@ __all__ = [
     "PriceObservation",
     "PriceObservationV2",
     "AccountLedger",
+    "ShoppingList",
+    "ShoppingListItem",
+    "ShoppingListMutation",
+    "ShoppingListOperation",
+    "ShoppingListStatus",
+    "ShoppingListSyncState",
     "AliasMatchMethod",
     "AliasSource",
     "IdentityStatus",

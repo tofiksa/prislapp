@@ -279,13 +279,19 @@
     "/v2/shopping-lists": {
       "get": {
         "operationId": "listShoppingLists",
+        "description": "Aktive og arkiverte lister. Slettede lister vises bare i /v2/sync.",
         "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 100 } }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListCollection" } }
             }
-          }
+          },
+          "400": { "$ref": "#/components/responses/Error" }
         }
       },
       "post": {
@@ -359,6 +365,32 @@
         },
         "responses": {
           "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItem" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}/items/{item_id}": {
+      "patch": {
+        "operationId": "patchShoppingListItem",
+        "description": "Mengde, avkryssing, posisjon og sletting settes som eksplisitte feltverdier, aldri som toggle.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "item_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItemPatch" } }
+          }
+        },
+        "responses": {
+          "200": {
             "content": {
               "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItem" } }
             }
@@ -626,13 +658,27 @@
       },
       "ShoppingList": {
         "type": "object",
-        "required": ["id", "name", "status", "version", "items"],
+        "required": ["id", "name", "status", "version", "content_revision", "created_at", "updated_at", "items"],
         "properties": {
           "id": { "type": "string", "format": "uuid" },
           "name": { "type": "string" },
           "status": { "type": "string", "enum": ["active", "archived"] },
-          "version": { "type": "integer" },
-          "items": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingListItem" } }
+          "version": {
+            "type": "integer",
+            "description": "Listens egne felter. En linjeendring øker den ikke."
+          },
+          "content_revision": {
+            "type": "integer",
+            "description": "Øker ved enhver endring på listen eller linjene. Avledet prising skal bruke denne som cachenøkkel, ikke version."
+          },
+          "deleted": { "type": "boolean", "default": false },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "items": {
+            "type": "array",
+            "description": "Komplett i REST og i fullt snapshot. I inkrementell sync er det bare linjene som er endret siden markøren.",
+            "items": { "$ref": "#/components/schemas/ShoppingListItem" }
+          }
         }
       },
       "ShoppingListCollection": {
@@ -659,7 +705,11 @@
           "expected_version": { "type": "integer" },
           "mutation_id": { "type": "string", "format": "uuid" },
           "name": { "type": "string" },
-          "status": { "type": "string", "enum": ["active", "archived"] }
+          "status": { "type": "string", "enum": ["active", "archived"] },
+          "deleted": {
+            "type": "boolean",
+            "description": "true setter slettemarkør og øker version. false gjenoppretter ikke; gjenoppretting er en egen handling."
+          }
         }
       },
       "ShoppingListItem": {
@@ -679,17 +729,30 @@
       },
       "ShoppingListItemUpsert": {
         "type": "object",
+        "description": "Enten user_product_id eller free_text, aldri begge. Fritekst slås ikke sammen med et kjent produkt. Maks 200 aktive linjer per liste.",
         "required": ["mutation_id", "quantity", "quantity_unit"],
         "properties": {
           "id": { "type": "string", "format": "uuid" },
           "mutation_id": { "type": "string", "format": "uuid" },
-          "expected_version": { "type": "integer" },
           "user_product_id": { "type": ["string", "null"], "format": "uuid" },
           "free_text": { "type": ["string", "null"] },
           "quantity": { "$ref": "#/components/schemas/DecimalString" },
-          "quantity_unit": { "type": "string" },
+          "quantity_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "checked": { "type": "boolean", "default": false },
+          "position": { "type": ["integer", "null"], "description": "Uten posisjon legges linjen sist blant de aktive." }
+        }
+      },
+      "ShoppingListItemPatch": {
+        "type": "object",
+        "required": ["mutation_id", "expected_version"],
+        "properties": {
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "expected_version": { "type": "integer" },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
           "checked": { "type": "boolean" },
-          "position": { "type": "integer" }
+          "position": { "type": "integer" },
+          "deleted": { "type": "boolean", "description": "true setter slettemarkør. false gjenoppretter ikke." }
         }
       },
       "ShoppingListPriceSummary": {
@@ -709,8 +772,98 @@
         "type": "object",
         "required": ["cursor", "mutations"],
         "properties": {
-          "cursor": { "type": ["string", "null"] },
-          "mutations": { "type": "array", "items": { "type": "object" } }
+          "cursor": {
+            "type": ["string", "null"],
+            "description": "null ber om fullt snapshot og tillater at mutasjonene avspilles. En utløpt eller ugyldig markør gir snapshot uten avspilling."
+          },
+          "mutations": { "type": "array", "items": { "$ref": "#/components/schemas/SyncMutation" } }
+        }
+      },
+      "SyncMutation": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/SyncListCreate" },
+          { "$ref": "#/components/schemas/SyncListPatch" },
+          { "$ref": "#/components/schemas/SyncItemCreate" },
+          { "$ref": "#/components/schemas/SyncItemPatch" }
+        ],
+        "discriminator": { "propertyName": "operation" }
+      },
+      "SyncListCreate": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShoppingListCreate" },
+          {
+            "type": "object",
+            "required": ["operation"],
+            "properties": { "operation": { "type": "string", "enum": ["list_create"] } }
+          }
+        ]
+      },
+      "SyncListPatch": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShoppingListPatch" },
+          {
+            "type": "object",
+            "required": ["operation", "list_id"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["list_patch"] },
+              "list_id": { "type": "string", "format": "uuid" }
+            }
+          }
+        ]
+      },
+      "SyncItemCreate": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShoppingListItemUpsert" },
+          {
+            "type": "object",
+            "required": ["operation", "list_id"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["item_create"] },
+              "list_id": { "type": "string", "format": "uuid" }
+            }
+          }
+        ]
+      },
+      "SyncItemPatch": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShoppingListItemPatch" },
+          {
+            "type": "object",
+            "required": ["operation", "list_id", "item_id"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["item_patch"] },
+              "list_id": { "type": "string", "format": "uuid" },
+              "item_id": { "type": "string", "format": "uuid" }
+            }
+          }
+        ]
+      },
+      "SyncConflict": {
+        "type": "object",
+        "description": "Mutasjonen er ikke utført. Klienten beholder sin utgave som gjenopprettbart utkast og velger selv.",
+        "required": ["operation", "mutation_id", "code", "message"],
+        "properties": {
+          "operation": { "type": "string" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "code": {
+            "type": "string",
+            "enum": [
+              "VERSION_CONFLICT",
+              "MUTATION_CONFLICT",
+              "LIST_DELETED",
+              "LIST_ARCHIVED",
+              "ITEM_DELETED",
+              "LIST_ITEM_LIMIT",
+              "CURSOR_EXPIRED",
+              "VALIDATION_ERROR",
+              "DUPLICATE_ID",
+              "NOT_FOUND"
+            ]
+          },
+          "message": { "type": "string" },
+          "field_errors": { "type": "array", "items": { "type": "object" } },
+          "local": { "type": ["object", "null"], "description": "Mutasjonen klienten sendte." },
+          "server": { "type": ["object", "null"], "description": "Serverens gjeldende utgave, eller null når raden ikke finnes." }
         }
       },
       "SyncResponse": {
@@ -731,7 +884,7 @@
             }
           },
           "lists": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingList" } },
-          "conflicts": { "type": "array", "items": { "type": "object" } }
+          "conflicts": { "type": "array", "items": { "$ref": "#/components/schemas/SyncConflict" } }
         }
       }
     }

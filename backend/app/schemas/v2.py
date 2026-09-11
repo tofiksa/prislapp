@@ -2,15 +2,36 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+import re
+from decimal import Decimal, InvalidOperation
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 
 from app.models.user_product import UserProduct
 from app.models.user_store import UserStore
 
+_DECIMAL_STRING = re.compile(r"^-?[0-9]+(\.[0-9]+)?$")
 
-def _decimal_string(value: Decimal | None) -> str | None:
+
+def _decimal_from_string(value: Any) -> Any:
+    if value is None or isinstance(value, Decimal):
+        return value
+    if isinstance(value, bool) or not isinstance(value, str):
+        raise ValueError("beløp og mengder må sendes som desimalstreng")
+    if not _DECIMAL_STRING.match(value):
+        raise ValueError("beløp og mengder må sendes som desimalstreng")
+    try:
+        return Decimal(value)
+    except InvalidOperation as exc:  # pragma: no cover - regexen fanger formatet
+        raise ValueError("beløp og mengder må sendes som desimalstreng") from exc
+
+
+# Et JSON-tall avvises, fordi flyttall ikke kan bære et betalt beløp uten tap.
+DecimalString = Annotated[Decimal, BeforeValidator(_decimal_from_string)]
+
+
+def decimal_string(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
 
 
@@ -48,9 +69,9 @@ class UserProductResponse(BaseModel):
             display_name=product.display_name,
             brand=product.brand,
             variant=product.variant,
-            pack_content=_decimal_string(product.pack_content),
+            pack_content=decimal_string(product.pack_content),
             pack_unit=product.pack_unit,
-            pack_count=_decimal_string(product.pack_count),
+            pack_count=decimal_string(product.pack_count),
             identity_status=product.identity_status,
             last_purchased_at=(
                 product.last_purchased_at.date().isoformat()

@@ -96,8 +96,8 @@ def _seed_receipt(
     return ids
 
 
-def test_007_is_head_and_declared_for_schema_verification():
-    assert run_migrations.migration_revisions()[-1] == "007"
+def test_007_is_in_the_chain_and_declared_for_schema_verification():
+    assert "007" in run_migrations.migration_revisions()
     declared = {revision.revision for revision in run_migrations.SCHEMA_REVISIONS}
     assert "007" in declared
 
