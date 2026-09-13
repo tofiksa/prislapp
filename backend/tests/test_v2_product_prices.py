@@ -742,12 +742,14 @@ async def test_the_response_reproduces_the_old_and_newer_price_fixture(
     await _observe(
         client, db_session, owner, headers,
         store=store, product=product,
-        price=fixture["historical_lowest"]["amount"], purchase_date=_days_ago(152),
+        price=fixture["historical_lowest"]["amount"],
+        purchase_date=fixture["historical_lowest"]["purchase_date"],
     )
     await _observe(
         client, db_session, owner, headers,
         store=store, product=product,
-        price=fixture["latest_by_store"][0]["amount"], purchase_date=_days_ago(3),
+        price=fixture["latest_by_store"][0]["amount"],
+        purchase_date=fixture["latest_by_store"][0]["purchase_date"],
     )
 
     body = (await _prices(client, product, headers)).json()
