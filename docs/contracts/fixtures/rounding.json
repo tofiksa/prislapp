@@ -1,0 +1,9 @@
+{
+  "id": "rounding",
+  "description": "2,01 / 2 gir 1,005 internt og 1,01 ved visning med ROUND_HALF_UP.",
+  "net_line_total": "2.01",
+  "package_count": "2",
+  "internal": "1.005000",
+  "display": "1.01",
+  "rounding": "ROUND_HALF_UP"
+}

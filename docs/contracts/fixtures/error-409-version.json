@@ -1,0 +1,14 @@
+{
+  "code": "VERSION_CONFLICT",
+  "message": "Listen er endret. Last inn gjeldende versjon og prøv igjen.",
+  "field_errors": [
+    {
+      "field": "expected_version",
+      "code": "stale_version",
+      "message": "Forventet versjon 3, gjeldende er 4."
+    }
+  ],
+  "retryable": false,
+  "request_id": "req_01c00_example",
+  "current_version": 4
+}

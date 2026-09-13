@@ -1,0 +1,11 @@
+{
+  "id": "discount-unresolved",
+  "description": "Ufordelt kurvrabatt gir ingen standardrangering.",
+  "line_type": "product",
+  "gross_line_total": "40.00",
+  "printed_discount_total": "10.00",
+  "net_line_total": null,
+  "eligible": false,
+  "exclusion_reasons": ["unknown_discount"],
+  "user_message": "Må avklares"
+}

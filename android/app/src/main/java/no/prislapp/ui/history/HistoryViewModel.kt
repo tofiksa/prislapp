@@ -13,6 +13,7 @@ import kotlinx.coroutines.CancellationException
 import no.prislapp.data.remote.dto.ReceiptSummaryResponse
 import no.prislapp.data.remote.dto.StoreResponse
 import no.prislapp.data.repository.ReceiptRepository
+import no.prislapp.data.repository.ShoppingListRepository
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -47,6 +48,7 @@ data class HistoryUiState(
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
     private val receiptRepository: ReceiptRepository,
+    private val shoppingListRepository: ShoppingListRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
@@ -103,6 +105,21 @@ class HistoryViewModel @Inject constructor(
     fun loadMore() { if (!_uiState.value.isLoading && _uiState.value.hasMore) loadReceipts(append = true) }
     fun reload() = loadReceipts()
 
+    fun useInShoppingList(receiptId: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                shoppingListRepository.copyFromReceipt(receiptId)
+                onSuccess()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _uiState.update {
+                    it.copy(error = "Kunne ikke legge kvitteringen i handlelisten.")
+                }
+            }
+        }
+    }
+
     private fun loadReceipts(append: Boolean = false) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
@@ -112,7 +129,7 @@ class HistoryViewModel @Inject constructor(
                 val response = receiptRepository.listReceiptsFiltered(
                     page = if (append) state.page + 1 else 1,
                     storeId = state.selectedStoreId,
-                    status = "CONFIRMED",
+                    status = null,
                     fromDate = state.fromDate?.toStartOfDayIso(),
                     toDate = state.toDate?.toEndOfDayIso(),
                 )

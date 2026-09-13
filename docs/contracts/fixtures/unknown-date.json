@@ -1,0 +1,12 @@
+{
+  "id": "unknown-date",
+  "description": "Udatert kvittering importert i dag blir ikke en fersk prisobservasjon.",
+  "uploaded_at": "2026-09-11T08:00:00Z",
+  "confirmed_at": "2026-09-11T08:05:00Z",
+  "purchase_date": null,
+  "purchase_time": null,
+  "date_precision": "unknown",
+  "date_source": "unknown",
+  "eligible_for_dated_ranking": false,
+  "shown_separately": true
+}

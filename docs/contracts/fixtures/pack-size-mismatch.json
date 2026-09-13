@@ -1,0 +1,19 @@
+{
+  "id": "pack-size-mismatch",
+  "description": "400 g og 200 g med likt produktnavn får ikke samme pakningsminimum.",
+  "same_package_minimum": false,
+  "left": {
+    "display_name": "Yoghurt naturell",
+    "pack_content": "400",
+    "pack_unit": "g",
+    "net_line_total": "24.90",
+    "price_basis": "per_package"
+  },
+  "right": {
+    "display_name": "Yoghurt naturell",
+    "pack_content": "200",
+    "pack_unit": "g",
+    "net_line_total": "14.90",
+    "price_basis": "per_package"
+  }
+}

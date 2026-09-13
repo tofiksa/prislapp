@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.prislapp.R
-import no.prislapp.data.local.entity.PendingReceiptEntity
 import no.prislapp.ui.components.EmptyState
 import no.prislapp.ui.components.PrislappTopBar
 import no.prislapp.ui.components.ReceiptRow
@@ -126,7 +125,10 @@ fun HomeScreen(
                         statusLabel = receiptStatusLabel(pending.status),
                         onClick = {
                             if (pending.serverReceiptId != null &&
-                                pending.status == PendingReceiptEntity.STATUS_READY_FOR_REVIEW
+                                no.prislapp.data.local.entity.ReceiptQueueStatus.canonical(
+                                    pending.status,
+                                    pending.serverReceiptId,
+                                ) == no.prislapp.data.local.entity.ReceiptQueueStatus.READY_FOR_REVIEW
                             ) {
                                 onOpenReceipt(pending.serverReceiptId)
                             } else {

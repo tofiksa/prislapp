@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feat/handlehjelp-p0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (SQLite-enhetstester og C00-kontrakter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: pytest (SQLite-enhetstester og kontraktstester)
+        run: python -m pytest -q
+
+  backend-postgres:
+    name: Backend (PostgreSQL-migreringer)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      # Kastbar testinstans. Ikke produksjonskonfigurasjon og ingen secrets.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: prislapp
+          POSTGRES_PASSWORD: prislapp
+          POSTGRES_DB: prislapp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prislapp"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PRISLAPP_POSTGRES_TEST_URL: postgresql+asyncpg://prislapp:prislapp@localhost:5432/prislapp_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: pytest (migreringer mot PostgreSQL 16)
+        run: python -m pytest -m postgres -q
+
+  android:
+    name: Android (assembleDebug, testDebugUnitTest, lintDebug)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Gradle 9.6.0 kjøres på JDK 25; app-kode kompileres mot Java 17.
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew assembleDebug testDebugUnitTest lintDebug

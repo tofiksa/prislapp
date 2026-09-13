@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import no.prislapp.data.local.entity.PendingReceiptEntity
+import no.prislapp.data.local.entity.ReceiptQueueStatus
 import no.prislapp.data.remote.dto.ReceiptConfirmItemRequest
 import no.prislapp.data.remote.dto.ReceiptConfirmRequest
 import no.prislapp.data.remote.dto.ReceiptDetailResponse
@@ -67,12 +68,27 @@ class ReceiptProcessingViewModel @Inject constructor(
 
                 _uiState.update {
                     it.copy(
-                        status = pending.status,
+                        status = no.prislapp.data.local.entity.ReceiptQueueStatus.canonical(
+                            pending.status,
+                            pending.serverReceiptId,
+                        ),
                         serverReceiptId = pending.serverReceiptId,
                     )
                 }
 
-                if (pending.status == PendingReceiptEntity.STATUS_CONFIRMED) {
+                val localStatus = no.prislapp.data.local.entity.ReceiptQueueStatus.canonical(
+                    pending.status,
+                    pending.serverReceiptId,
+                )
+                if (pending.status == PendingReceiptEntity.STATUS_CONFIRMED ||
+                    localStatus == no.prislapp.data.local.entity.ReceiptQueueStatus.CONFIRMED
+                ) {
+                    _uiState.update { it.copy(isPolling = false) }
+                    break
+                }
+                if (localStatus == no.prislapp.data.local.entity.ReceiptQueueStatus.FAILED_PERMANENT ||
+                    localStatus == no.prislapp.data.local.entity.ReceiptQueueStatus.NEEDS_ACTION
+                ) {
                     _uiState.update { it.copy(isPolling = false) }
                     break
                 }
@@ -82,11 +98,16 @@ class ReceiptProcessingViewModel @Inject constructor(
                     try {
                         val detail = receiptRepository.getReceiptDetail(serverReceiptId)
                         receiptRepository.syncLocalStatus(serverReceiptId, detail.status)
+                        val mapped = no.prislapp.data.local.entity.ReceiptQueueStatus.fromServer(
+                            detail.status,
+                            serverReceiptId,
+                        )
                         _uiState.update {
-                            it.copy(status = detail.status, error = null)
+                            it.copy(status = mapped, error = null)
                         }
-                        if (detail.status == PendingReceiptEntity.STATUS_READY_FOR_REVIEW ||
-                            detail.status == PendingReceiptEntity.STATUS_FAILED
+                        if (mapped == no.prislapp.data.local.entity.ReceiptQueueStatus.READY_FOR_REVIEW ||
+                            mapped == no.prislapp.data.local.entity.ReceiptQueueStatus.NEEDS_ACTION ||
+                            mapped == no.prislapp.data.local.entity.ReceiptQueueStatus.FAILED_PERMANENT
                         ) {
                             _uiState.update { it.copy(isPolling = false) }
                             break
@@ -107,7 +128,12 @@ class ReceiptProcessingViewModel @Inject constructor(
     fun retry() {
         viewModelScope.launch {
             try {
-                receiptRepository.retryReceipt(localId)
+                val pending = receiptRepository.getPendingReceipt(localId)
+                if (pending != null &&
+                    ReceiptQueueStatus.canRetry(pending.status, pending.serverReceiptId)
+                ) {
+                    receiptRepository.retryReceipt(localId)
+                }
                 _uiState.update { it.copy(isPolling = true, error = null) }
                 startPolling()
             } catch (e: CancellationException) { throw e

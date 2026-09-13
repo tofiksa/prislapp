@@ -1,9 +1,7 @@
 import uuid
 from datetime import datetime, timezone
-from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
-from PIL import Image, UnidentifiedImageError
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,10 +18,18 @@ from app.schemas.receipt import (
     ReceiptSummaryResponse,
     ReceiptUploadResponse,
     StoreResponse,
+    OcrExtractionSummary,
+)
+from app.services.ocr_outbox import enqueue_ocr_job, publish_pending_for_receipt
+from app.services.receipt_image import (
+    MAX_UPLOAD_BYTES,
+    InvalidImageError,
+    idempotency_conflict,
+    inspect_receipt_image,
+    sha256_hex,
 )
 from app.services.receipt_service import ReceiptService
 from app.services.storage_service import StorageService
-from app.worker.tasks import process_receipt
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
 
@@ -46,6 +52,32 @@ def _to_summary(receipt) -> ReceiptSummaryResponse:
     )
 
 
+def _extraction_summary(receipt) -> OcrExtractionSummary | None:
+    if not receipt.ocr_extraction_json and not receipt.ocr_quality:
+        return None
+    summary = OcrExtractionSummary(
+        quality=receipt.ocr_quality,
+        pipeline_version=receipt.ocr_pipeline_version,
+    )
+    if receipt.ocr_extraction_json:
+        try:
+            import json
+
+            payload = json.loads(receipt.ocr_extraction_json)
+            summary.store_chain = payload.get("store", {}).get("chain")
+            summary.store_state = payload.get("store", {}).get("state")
+            summary.total_state = payload.get("total", {}).get("state")
+            computed = payload.get("total", {}).get("computed_items_total")
+            if computed is not None:
+                from decimal import Decimal
+
+                summary.computed_items_total = Decimal(computed)
+            summary.warnings = list(payload.get("warnings", []))
+        except (json.JSONDecodeError, ValueError):
+            summary.warnings = ["extraction_metadata_unreadable"]
+    return summary
+
+
 def _to_detail(receipt) -> ReceiptDetailResponse:
     summary = _to_summary(receipt)
     items = [
@@ -62,6 +94,7 @@ def _to_detail(receipt) -> ReceiptDetailResponse:
         **summary.model_dump(),
         raw_ocr_text=receipt.raw_ocr_text,
         items=items,
+        extraction=_extraction_summary(receipt),
     )
 
 
@@ -78,8 +111,9 @@ async def upload_receipt(
             detail="File must be an image",
         )
 
-    image_bytes = await file.read(20 * 1024 * 1024 + 1)
-    if len(image_bytes) > 20 * 1024 * 1024:
+    # S02-C: 20 MiB / 40_000_000 piksler / 12_000 px per side. Ingen nedskalering.
+    image_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(image_bytes) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Image exceeds 20 MB")
     if not image_bytes:
         raise HTTPException(
@@ -88,10 +122,11 @@ async def upload_receipt(
         )
 
     try:
-        with Image.open(BytesIO(image_bytes)) as image:
-            image.verify()
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+        content_type, width, height = inspect_receipt_image(image_bytes)
+    except InvalidImageError as exc:
         raise HTTPException(status_code=400, detail="Invalid image") from exc
+
+    payload_hash = sha256_hex(image_bytes)
 
     service = ReceiptService(db)
     if idempotency_key:
@@ -103,16 +138,20 @@ async def upload_receipt(
         if existing:
             if existing.user_id != current_user.id:
                 raise HTTPException(status_code=409, detail="Capture ID already used")
-            if existing.status == ReceiptStatus.UPLOADED.value:
-                await run_in_threadpool(process_receipt.delay, str(existing.id))
+            if existing.payload_hash != payload_hash:
+                raise idempotency_conflict()
+            # Replay: ikke ny OCR-jobb om den allerede er queued/processing/done.
             return ReceiptUploadResponse(id=str(existing.id), status=existing.status)
     receipt = await service.create_receipt(
         current_user,
         image_bytes,
-        file.content_type or "image/jpeg",
+        content_type,
         receipt_id=idempotency_key,
+        payload_hash=payload_hash,
+        image_width=width,
+        image_height=height,
     )
-    await run_in_threadpool(process_receipt.delay, str(receipt.id))
+    await publish_pending_for_receipt(db, receipt.id)
 
     return ReceiptUploadResponse(id=str(receipt.id), status=receipt.status)
 
@@ -230,6 +269,7 @@ async def retry_receipt(
     if not receipt.image_path or expires <= datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="Original image expired; capture it again")
     receipt.status = ReceiptStatus.UPLOADED.value
+    await enqueue_ocr_job(db, current_user.id, receipt.id)
     await db.commit()
-    await run_in_threadpool(process_receipt.delay, str(receipt.id))
+    await publish_pending_for_receipt(db, receipt.id)
     return ReceiptUploadResponse(id=str(receipt.id), status=receipt.status)

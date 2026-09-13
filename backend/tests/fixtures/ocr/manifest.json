@@ -1,0 +1,212 @@
+{
+  "schema_version": "1.0.0",
+  "splits": {
+    "development": "Used for regression development and CI",
+    "holdout": "Locked evaluation set — tune thresholds once per candidate"
+  },
+  "fixtures": [
+    {
+      "id": "baseline-rema-metro-split-lines",
+      "split": "development",
+      "variant_group": "rema-metro-senter",
+      "source": {"type": "text", "file": "text/baseline_rema_split_lines.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "rema1000",
+        "branch_text": "METRO SENTER",
+        "printed_total": "158.83",
+        "item_count_min": 1
+      },
+      "known_bug": "store_name null when chain and branch on separate lines"
+    },
+    {
+      "id": "baseline-rema-discount-total",
+      "split": "development",
+      "variant_group": "rema-discount",
+      "source": {"type": "text", "file": "text/baseline_rema_discount.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "rema1000",
+        "branch_text": "METRO SENTER",
+        "printed_total": "20.00"
+      },
+      "known_bug": "uses item sum 25.00 instead of TOTALT 20.00"
+    },
+    {
+      "id": "baseline-kiwi-total-next-line",
+      "split": "development",
+      "variant_group": "kiwi-total-label",
+      "source": {"type": "text", "file": "text/baseline_kiwi_total_next_line.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "kiwi",
+        "printed_total": "20.00"
+      },
+      "known_bug": "uses item amount 25.00 instead of total on next line"
+    },
+    {
+      "id": "baseline-kiwi-thousands-separator",
+      "split": "development",
+      "variant_group": "kiwi-thousands",
+      "source": {"type": "text", "file": "text/baseline_kiwi_thousands.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "kiwi",
+        "printed_total": "1234.50",
+        "item_count_max": 1
+      },
+      "known_bug": "parses total line as product lines"
+    },
+    {
+      "id": "baseline-kiwi-welcome-header",
+      "split": "development",
+      "variant_group": "kiwi-welcome",
+      "source": {"type": "text", "file": "text/baseline_kiwi_welcome.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "kiwi",
+        "branch_text": null,
+        "observed_contains": "KIWI",
+        "printed_total": "25.00"
+      },
+      "known_bug": "first line VELKOMMEN becomes store name"
+    },
+    {
+      "id": "baseline-kiwi-sum-before-total",
+      "split": "development",
+      "variant_group": "kiwi-final-total",
+      "source": {"type": "text", "file": "text/baseline_kiwi_sum_before_total.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "kiwi",
+        "printed_total": "20.00"
+      },
+      "known_bug": "stops at first SUM 25.00 instead of final TOTALT 20.00"
+    },
+    {
+      "id": "golden-rema-metro-image",
+      "split": "holdout",
+      "variant_group": "rema-metro-senter",
+      "source": {"type": "image", "file": "../../../testdata/receipts/rema1000-metro-senter.png"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "rema1000",
+        "branch_text": "METRO SENTER",
+        "printed_total": "158.83",
+        "item_count": 7
+      }
+    },
+    {
+      "id": "golden-normal-triaden-image",
+      "split": "holdout",
+      "variant_group": "normal-triaden",
+      "source": {"type": "image", "file": "../../../testdata/receipts/normal-triaden.png"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "normal",
+        "branch_text": "Oslo, Thon Senter Triaden",
+        "printed_total": "100.00",
+        "item_count": 6
+      }
+    },
+    {
+      "id": "golden-europris-cropped-image",
+      "split": "holdout",
+      "variant_group": "europris-triaden",
+      "source": {"type": "image", "file": "../../../testdata/receipts/europris-normal-triaden.png"},
+      "readability": "cropped",
+      "document_scope": "multi_document",
+      "expected": {
+        "chain": "europris",
+        "printed_total": null,
+        "notes": "Composite/cropped image — total 39.90 is not verified ground truth for full image"
+      }
+    },
+    {
+      "id": "edge-normal-cash-change",
+      "split": "development",
+      "variant_group": "normal-cash",
+      "source": {"type": "text", "file": "text/edge_normal_cash_change.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "normal",
+        "printed_total": "100.00"
+      }
+    },
+    {
+      "id": "edge-rema-mva-table",
+      "split": "development",
+      "variant_group": "rema-mva",
+      "source": {"type": "text", "file": "text/edge_rema_mva_table.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "rema1000",
+        "printed_total": "158.83"
+      }
+    },
+    {
+      "id": "edge-conflicting-totals",
+      "split": "development",
+      "variant_group": "conflicting-totals",
+      "source": {"type": "text", "file": "text/edge_conflicting_totals.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "printed_total": null,
+        "state": "uncertain"
+      }
+    },
+    {
+      "id": "edge-empty-text",
+      "split": "development",
+      "variant_group": "empty",
+      "source": {"type": "text", "file": "text/edge_empty.txt"},
+      "readability": "unreadable",
+      "document_scope": "single",
+      "expected": {
+        "printed_total": null,
+        "quality": "unreadable"
+      }
+    },
+    {
+      "id": "edge-label-amount-split",
+      "split": "development",
+      "variant_group": "split-label",
+      "source": {"type": "text", "file": "text/edge_label_amount_split.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": "kiwi",
+        "printed_total": "45.50"
+      }
+    },
+    {
+      "id": "edge-unknown-store",
+      "split": "development",
+      "variant_group": "unknown-store",
+      "source": {"type": "text", "file": "text/edge_unknown_store.txt"},
+      "readability": "readable",
+      "document_scope": "single",
+      "expected": {
+        "chain": null,
+        "printed_total": "15.00"
+      }
+    }
+  ],
+  "collection": {
+    "target_count": 30,
+    "target_chains": ["rema1000", "kiwi", "normal", "europris", "coop", "meny"],
+    "status": "blocked",
+    "notes": "Tooling ready; additional consented receipt images not yet collected"
+  }
+}

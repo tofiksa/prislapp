@@ -34,3 +34,22 @@ data class ProductPricesResponse(
 data class StoreListResponse(
     val items: List<StoreResponse>,
 )
+
+data class UserProductResponse(
+    val id: String,
+    val display_name: String,
+    val brand: String? = null,
+    val variant: String? = null,
+    val pack_content: String? = null,
+    val pack_unit: String,
+    val pack_count: String? = null,
+    val identity_status: String,
+    val last_purchased_at: String? = null,
+    val purchase_count: Int = 0,
+    val version: Int = 1,
+)
+
+data class UserProductListResponse(
+    val items: List<UserProductResponse>,
+    val next_cursor: String? = null,
+)

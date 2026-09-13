@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_current_user_c00
 from app.models.user import User
 from app.schemas.auth import (
     GoogleAuthRequest,
     LoginRequest,
+    PasswordResetComplete,
+    PasswordResetRequest,
     RegisterRequest,
     RefreshRequest,
     TokenResponse,
@@ -14,7 +16,6 @@ from app.schemas.auth import (
 )
 from app.services.auth_service import AuthService
 from app.services.google_auth import verify_google_id_token
-from app.security.jwt import decode_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -22,16 +23,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     try:
-        payload = decode_token(body.refresh_token)
-        if payload.get("type") != "refresh" or not isinstance(payload.get("sub"), str):
-            raise ValueError("Invalid refresh token")
-        service = AuthService(db)
-        user = await service.get_user_by_id(payload["sub"])
-        if user is None:
-            raise ValueError("Unknown user")
+        return await AuthService(db).refresh(body.refresh_token)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail="Invalid refresh token") from exc
-    return service._token_response(user.id)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -69,10 +63,51 @@ async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
             detail="Google token missing required claims",
         )
 
-    _, tokens = await AuthService(db).login_or_register_google(google_sub, email)
+    _, tokens = await AuthService(db).login_or_register_google(
+        google_sub,
+        email,
+        email_verified=bool(payload.get("email_verified")),
+    )
     return tokens
 
 
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)):
     return UserResponse(id=str(current_user.id), email=current_user.email)
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_reset(
+    body: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    await AuthService(db).request_password_reset(body.email)
+    return Response(status_code=status.HTTP_202_ACCEPTED)
+
+
+@router.post("/password-reset/complete", status_code=status.HTTP_204_NO_CONTENT)
+async def complete_password_reset(
+    body: PasswordResetComplete,
+    db: AsyncSession = Depends(get_db),
+):
+    await AuthService(db).complete_password_reset(body.token, body.new_password)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    body: RefreshRequest,
+    current_user: User = Depends(get_current_user_c00),
+    db: AsyncSession = Depends(get_db),
+):
+    await AuthService(db).logout(current_user.id, body.refresh_token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_all(
+    current_user: User = Depends(get_current_user_c00),
+    db: AsyncSession = Depends(get_db),
+):
+    await AuthService(db).logout_all(current_user.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -67,15 +67,19 @@ fun ReceiptProcessingScreen(
         }
     }
 
-    val bodyText = when {
-        uiState.status == PendingReceiptEntity.STATUS_PENDING ||
-            uiState.status == PendingReceiptEntity.STATUS_UPLOADING ||
-            uiState.status == PendingReceiptEntity.STATUS_UPLOADED ->
-            stringResource(R.string.processing_body_upload)
-        uiState.status == PendingReceiptEntity.STATUS_PROCESSING ->
+    val canonical = no.prislapp.data.local.entity.ReceiptQueueStatus.canonical(
+        uiState.status,
+        uiState.serverReceiptId,
+    )
+    val bodyText = when (canonical) {
+        no.prislapp.data.local.entity.ReceiptQueueStatus.QUEUED_OFFLINE,
+        no.prislapp.data.local.entity.ReceiptQueueStatus.UPLOADING,
+        -> stringResource(R.string.processing_body_upload)
+        no.prislapp.data.local.entity.ReceiptQueueStatus.PROCESSING ->
             stringResource(R.string.processing_body_ocr)
-        uiState.status == PendingReceiptEntity.STATUS_FAILED || uiState.error != null ->
-            stringResource(R.string.processing_body_failed)
+        no.prislapp.data.local.entity.ReceiptQueueStatus.NEEDS_ACTION,
+        no.prislapp.data.local.entity.ReceiptQueueStatus.FAILED_PERMANENT,
+        -> stringResource(R.string.processing_body_failed)
         else -> receiptStatusLabel(uiState.status)
     }
 
@@ -100,7 +104,7 @@ fun ReceiptProcessingScreen(
                 text = bodyText,
                 modifier = Modifier.padding(top = 16.dp),
             )
-            if (uiState.status == PendingReceiptEntity.STATUS_FAILED || uiState.error != null) {
+            if (showProcessingScreenRetry(canonical, uiState.serverReceiptId, uiState.error)) {
                 OutlinedButton(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) }
             }
         }
@@ -110,7 +114,7 @@ fun ReceiptProcessingScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReceiptReviewScreen(
-    onConfirmed: () -> Unit,
+    onConfirmed: (readyCount: Int) -> Unit,
     onBack: () -> Unit,
     viewModel: ReceiptReviewViewModel = hiltViewModel(),
 ) {
@@ -155,7 +159,7 @@ fun ReceiptReviewScreen(
             DatePicker(state = datePickerState)
         }
     }
-    LaunchedEffect(uiState.isDeleted) { if (uiState.isDeleted) onConfirmed() }
+    LaunchedEffect(uiState.isDeleted) { if (uiState.isDeleted) onConfirmed(0) }
     LaunchedEffect(uiState.status) {
         while (uiState.status == "UPLOADED" || uiState.status == "PROCESSING") {
             kotlinx.coroutines.delay(3_000)
@@ -165,7 +169,7 @@ fun ReceiptReviewScreen(
 
     LaunchedEffect(uiState.isConfirmed) {
         if (uiState.isConfirmed) {
-            onConfirmed()
+            onConfirmed(uiState.items.size)
         }
     }
 

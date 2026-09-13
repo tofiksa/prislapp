@@ -31,6 +31,38 @@ pip install -r requirements.txt
 pytest -v
 ```
 
+Disse testene kjører mot `sqlite+aiosqlite:///:memory:`. SQLite er **ikke** bevis for
+Decimal-presisjon i SQL, radlåser eller migrering; det må kjøres mot PostgreSQL.
+
+### PostgreSQL-migreringstester
+
+Testene i `backend/tests/postgres/` (markør `postgres`) krever en disponibel
+PostgreSQL 16 og hoppes over uten `PRISLAPP_POSTGRES_TEST_URL`. Hver test oppretter og
+sletter en egen database, så brukeren må ha `CREATEDB` og URL-en må peke på en
+kastbar instans – aldri produksjon.
+
+```bash
+cd backend
+docker compose up -d postgres
+PRISLAPP_POSTGRES_TEST_URL=postgresql+asyncpg://prislapp:prislapp@localhost:5432/prislapp \
+  .venv/bin/python -m pytest -m postgres -q
+```
+
+Eget testoppsett uten Compose-volumet:
+
+```bash
+docker run --rm -d --name prislapp-pg-test \
+  -e POSTGRES_USER=prislapp -e POSTGRES_PASSWORD=prislapp -e POSTGRES_DB=prislapp_test \
+  -p 55432:5432 postgres:16-alpine
+PRISLAPP_POSTGRES_TEST_URL=postgresql+asyncpg://prislapp:prislapp@localhost:55432/prislapp_test \
+  .venv/bin/python -m pytest -m postgres -q
+docker rm -f prislapp-pg-test
+```
+
+Testene dekker frisk database til head, oppgradering fra stampet 001/002/003/004 uten
+tap av `users`/`receipts`, at et `create_all()`-skjema ikke blir feilstampet, og at to
+samtidige `run_migrations`-kall serialiseres av migreringslåsen.
+
 ## Android
 
 ```bash
@@ -52,6 +84,31 @@ sett `api.base.url=http://10.0.2.2:8000/` i `android/local.properties`, eller by
 - **Java 24:** Gradle 8.14+ løser tidligere «Type T not present» på unit tests; bruk JDK 25 + Gradle 9.5 for anbefalt oppsett.
 
 For Google Sign-In: sett `GOOGLE_WEB_CLIENT_ID` i `android/app/build.gradle.kts` og `GOOGLE_CLIENT_ID` i `backend/.env`.
+
+## CI
+
+`.github/workflows/ci.yml` kjører på pull request og på push til `main` og
+`feat/handlehjelp-p0`, med tre jobber:
+
+| Jobb | Kommando |
+|---|---|
+| Backend | `python -m pytest -q` (SQLite-enhetstester + C00-kontrakter) |
+| Backend PostgreSQL | `python -m pytest -m postgres -q` mot servicecontainer `postgres:16-alpine` |
+| Android | `./gradlew assembleDebug testDebugUnitTest lintDebug` på Temurin JDK 25 |
+
+Samme kontroller lokalt:
+
+```bash
+cd backend && .venv/bin/python -m pytest -q
+cd backend && .venv/bin/python -m pytest tests/contracts/test_c00_contracts.py -q
+# PostgreSQL-jobben: start container som beskrevet over, så
+cd backend && PRISLAPP_POSTGRES_TEST_URL=postgresql+asyncpg://prislapp:prislapp@localhost:55432/prislapp_test \
+  .venv/bin/python -m pytest -m postgres -q
+cd android && ./gradlew assembleDebug testDebugUnitTest lintDebug
+```
+
+CI bruker kastbare testcontainere uten secrets. Ingen jobb deployer eller rører
+produksjonsdata.
 
 ## Fase 1 status
 
@@ -93,6 +150,24 @@ For Google Sign-In: sett `GOOGLE_WEB_CLIENT_ID` i `android/app/build.gradle.kts`
 API-oppstart kjører Alembic automatisk, både i Compose og med Dockerfile i roten.
 Migrasjon `004` omregner eksisterende prisobservasjoner fra linjesum til pris per enhet
 og retter butikktilknytningen etter butikkredigering. Ta vanlig databasebackup før oppgradering.
+
+`python -m scripts.run_migrations` tar en PostgreSQL advisory lock (`pg_advisory_lock`)
+før stamping og `alembic upgrade head`. Starter to instanser samtidig, venter den andre
+på låsen i stedet for å kjøre samme migrering parallelt. Andre dialekter (SQLite) kjører
+uten lås.
+
+Skjemaversjon **gjettes ikke** fra at en tabell finnes. `scripts/run_migrations.py`
+verifiserer tabellene *og* kolonnene hver revisjon oppretter (`SCHEMA_REVISIONS`) før en
+database som er bootstrappet med `create_all()` stampes, og stopper med
+`MigrationStateError` hvis skjemaet bare er delvis på plass, mangler en tidligere
+revisjon eller inneholder en revisjon som ikke er deklarert. Rene datamigreringer
+(`DATA_ONLY_REVISIONS`, i dag `004`) etterlater ingen skjemaspor og kjøres på nytt etter
+stamping; de må derfor være idempotente.
+
+**Ny migrasjon:** legg skjemaendringer inn i `SCHEMA_REVISIONS` med tabell- og
+kolonnenavn, eller revisjonen i `DATA_ONLY_REVISIONS` hvis den bare endrer data.
+`tests/test_migrations.py` feiler hvis en revisjon i `alembic/versions/` ikke er
+deklarert.
 
 Compose starter også **scheduler** (Celery Beat). Ved separat Sliplane-deploy må både
 worker og én scheduler kjøre med samme database-, Redis- og MinIO-konfigurasjon:

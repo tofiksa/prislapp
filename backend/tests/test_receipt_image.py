@@ -1,5 +1,5 @@
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
@@ -15,9 +15,8 @@ def mock_storage_and_celery():
     with (
         patch.object(StorageService, "upload_receipt", return_value="test/path.jpg"),
         patch.object(StorageService, "download_receipt", return_value=b"fake-image-bytes"),
-        patch("app.routers.receipts.process_receipt") as mock_task,
+        patch("app.services.ocr_outbox.deliver_ocr_job"),
     ):
-        mock_task.delay = MagicMock()
         yield
 
 

@@ -37,7 +37,7 @@ def storage():
         objects.pop(name, None)
     with patch.object(StorageService, "upload_receipt", upload), patch.object(
         StorageService, "delete_receipt", remove, create=True
-    ), patch("app.routers.receipts.process_receipt.delay"):
+    ), patch("app.services.ocr_outbox.deliver_ocr_job"):
         yield objects
 
 

@@ -1,0 +1,21 @@
+{
+  "id": "tied-lowest",
+  "description": "Ved lik laveste pris vises alle delte førsteplasser.",
+  "historical_lowest": {
+    "amount": "24.90",
+    "tied_stores": [
+      {
+        "store_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "name": "Rema 1000 Majorstuen",
+        "identity_level": "branch",
+        "purchase_date": "2026-08-02"
+      },
+      {
+        "store_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "name": "Kiwi Frogner",
+        "identity_level": "branch",
+        "purchase_date": "2026-08-20"
+      }
+    ]
+  }
+}

@@ -15,6 +15,7 @@ import javax.inject.Inject
 data class AuthUiState(
     val isLoading: Boolean = false,
     val isLoggedIn: Boolean = false,
+    val isAuthResolved: Boolean = false,
     val error: String? = null,
     val user: User? = null,
 )
@@ -30,7 +31,13 @@ class AuthViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             authRepository.isLoggedIn.collect { loggedIn ->
-                _uiState.update { it.copy(isLoggedIn = loggedIn, user = if (loggedIn) it.user else null) }
+                _uiState.update {
+                    it.copy(
+                        isLoggedIn = loggedIn,
+                        isAuthResolved = true,
+                        user = if (loggedIn) it.user else null,
+                    )
+                }
             }
         }
     }
@@ -97,7 +104,7 @@ class AuthViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
-            _uiState.value = AuthUiState()
+            _uiState.value = AuthUiState(isAuthResolved = true)
         }
     }
 

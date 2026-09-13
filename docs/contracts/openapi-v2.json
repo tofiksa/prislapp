@@ -1,0 +1,1117 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Prislapp API v2",
+    "version": "2.0.0-p0",
+    "description": "Nye og endrede kontrakter for handlehjelp. Eksisterende v1-ruter under /auth, /receipts, /products og /stores beholdes i overgangen. Penger og mengder er desimalstrenger."
+  },
+  "servers": [
+    { "url": "http://localhost:8000", "description": "Lokal utvikling" }
+  ],
+  "paths": {
+    "/auth/password-reset/request": {
+      "post": {
+        "operationId": "requestPasswordReset",
+        "summary": "Be om passordreset. Samme svar for kjent og ukjent e-post.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PasswordResetRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Mottatt. Aldri skill kjente og ukjente adresser." },
+          "429": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/auth/password-reset/complete": {
+      "post": {
+        "operationId": "completePasswordReset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PasswordResetComplete" }
+            }
+          }
+        },
+        "responses": {
+          "204": { "description": "Passord oppdatert; gamle sesjoner invalideres." },
+          "400": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshRequest" }
+            }
+          }
+        },
+        "responses": { "204": { "description": "Gjeldende refresh-token tilbakekalt. Body-feltet er refresh_token, som på /auth/refresh." } }
+      }
+    },
+    "/auth/logout-all": {
+      "post": {
+        "operationId": "logoutAll",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "204": { "description": "Alle sesjoner tilbakekalt." } }
+      }
+    },
+    "/v2/me": {
+      "delete": {
+        "operationId": "deleteAccount",
+        "security": [{ "bearerAuth": [] }],
+        "summary": "Start kontosletting. Krever passord eller fersk innlogging.",
+        "responses": {
+          "202": {
+            "description": "Sletting startet.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountDeletionStatus" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/me/exports": {
+      "post": {
+        "operationId": "createExport",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExportStatus" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/me/products": {
+      "get": {
+        "operationId": "listMyProducts",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["recent", "frequent", "name"], "default": "recent" }
+          },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserProductList" },
+                "examples": {
+                  "empty": { "value": { "items": [], "next_cursor": null } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/me/products/{id}": {
+      "patch": {
+        "operationId": "patchMyProduct",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserProductPatch" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserProduct" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/me/products/{id}/merge": {
+      "post": {
+        "operationId": "mergeMyProducts",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ProductMergeRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserProduct" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/me/products/{id}/prices": {
+      "get": {
+        "operationId": "getMyProductPrices",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "include_conditional", "in": "query", "schema": { "type": "boolean", "default": false } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProductPriceResponse" },
+                "examples": {
+                  "oldAndNewer": {
+                    "externalValue": "./fixtures/old-and-newer-price.json"
+                  },
+                  "tied": { "externalValue": "./fixtures/tied-lowest.json" },
+                  "unknownDate": { "externalValue": "./fixtures/unknown-date.json" }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/me/stores": {
+      "get": {
+        "operationId": "listMyStores",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserStoreList" } }
+            }
+          }
+        }
+      }
+    },
+    "/v2/receipts/{id}/draft": {
+      "put": {
+        "operationId": "putReceiptDraft",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptDraftRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptRevision" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/receipts/{id}/confirm": {
+      "post": {
+        "operationId": "confirmReceiptV2",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptConfirmV2Request" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptRevision" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/receipts/{id}/revisions": {
+      "post": {
+        "operationId": "createReceiptRevision",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptConfirmV2Request" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptRevision" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists": {
+      "get": {
+        "operationId": "listShoppingLists",
+        "description": "Aktive og arkiverte lister. Slettede lister vises bare i /v2/sync.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListCollection" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createShoppingList",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListCreate" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          }
+        }
+      }
+    },
+    "/v2/shopping-lists/from-receipt": {
+      "post": {
+        "operationId": "createShoppingListFromReceipt",
+        "description": "Ny aktiv liste fra bekreftet kvittering. Kopierer ikke prisobservasjoner. Slettet eller fremmed vare blir fritekst uten produkt-ID.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListFromReceipt" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}": {
+      "get": {
+        "operationId": "getShoppingList",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "patch": {
+        "operationId": "patchShoppingList",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListPatch" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}/copy": {
+      "post": {
+        "operationId": "copyShoppingList",
+        "description": "Ny aktiv liste med nye linje-ID-er. Alle linjer er ukrysset. Arkivert kilde kan kopieres. Slettet eller fremmed kilde gir 404.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListCopy" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingList" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}/items": {
+      "post": {
+        "operationId": "addShoppingListItem",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItemUpsert" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItem" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}/items/{item_id}": {
+      "patch": {
+        "operationId": "patchShoppingListItem",
+        "description": "Mengde, avkryssing, posisjon og sletting settes som eksplisitte feltverdier, aldri som toggle.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "item_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItemPatch" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShoppingListItem" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v2/shopping-lists/{id}/price-summary": {
+      "get": {
+        "operationId": "getShoppingListPriceSummary",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "include_conditional", "in": "query", "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ShoppingListPriceSummary" },
+                "examples": {
+                  "partial": { "externalValue": "./fixtures/shopping-list-price-summary.json" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sync": {
+      "post": {
+        "operationId": "syncShoppingLists",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/SyncRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SyncResponse" } }
+            }
+          },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "responses": {
+      "Error": {
+        "description": "Feilkontrakt uten OCR-tekst, tokens eller stacktrace.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "versionConflict": { "externalValue": "./fixtures/error-409-version.json" }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "DecimalString": {
+        "type": "string",
+        "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+        "description": "Penge- og mengdeverdier som desimalstreng. Aldri JSON-number."
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["code", "message", "retryable", "request_id"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "field_errors": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/FieldError" }
+          },
+          "retryable": { "type": "boolean" },
+          "request_id": { "type": "string" }
+        }
+      },
+      "FieldError": {
+        "type": "object",
+        "required": ["field", "code", "message"],
+        "properties": {
+          "field": { "type": "string" },
+          "code": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      },
+      "PasswordResetRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": { "email": { "type": "string", "format": "email" } }
+      },
+      "PasswordResetComplete": {
+        "type": "object",
+        "required": ["token", "new_password"],
+        "properties": {
+          "token": { "type": "string" },
+          "new_password": { "type": "string", "minLength": 8 }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": ["refresh_token"],
+        "properties": { "refresh_token": { "type": "string" } }
+      },
+      "AccountDeletionStatus": {
+        "type": "object",
+        "required": ["status", "requested_at"],
+        "properties": {
+          "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "failed"] },
+          "requested_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ExportStatus": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["pending", "ready", "expired", "failed"] },
+          "download_url": { "type": ["string", "null"] },
+          "expires_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "UserProduct": {
+        "type": "object",
+        "required": ["id", "display_name", "identity_status", "version"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "display_name": { "type": "string" },
+          "brand": { "type": ["string", "null"] },
+          "variant": { "type": ["string", "null"] },
+          "pack_content": { "$ref": "#/components/schemas/DecimalString" },
+          "pack_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "pack_count": { "$ref": "#/components/schemas/DecimalString" },
+          "identity_status": { "type": "string", "enum": ["confirmed", "unresolved", "inherited"] },
+          "last_purchased_at": { "type": ["string", "null"], "format": "date" },
+          "purchase_count": { "type": "integer" },
+          "version": { "type": "integer" }
+        }
+      },
+      "UserProductList": {
+        "type": "object",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/UserProduct" } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "UserProductPatch": {
+        "type": "object",
+        "required": ["expected_version", "mutation_id"],
+        "properties": {
+          "expected_version": { "type": "integer" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "display_name": { "type": "string" },
+          "brand": { "type": ["string", "null"] },
+          "variant": { "type": ["string", "null"] },
+          "pack_content": { "$ref": "#/components/schemas/DecimalString" },
+          "pack_unit": { "type": "string" },
+          "identity_status": { "type": "string" }
+        }
+      },
+      "ProductMergeRequest": {
+        "type": "object",
+        "required": ["source_id", "source_version", "target_version", "mutation_id"],
+        "properties": {
+          "source_id": { "type": "string", "format": "uuid" },
+          "source_version": { "type": "integer" },
+          "target_version": { "type": "integer" },
+          "mutation_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "ProductPriceResponse": {
+        "type": "object",
+        "required": ["product_id", "currency", "price_basis", "price_data_version", "historical_lowest", "latest_by_store", "eligible_store_count", "excluded_observation_count", "history"],
+        "properties": {
+          "product_id": { "type": "string", "format": "uuid" },
+          "display_name": { "type": "string" },
+          "brand": { "type": ["string", "null"] },
+          "variant": { "type": ["string", "null"] },
+          "pack_content": { "type": ["string", "null"] },
+          "pack_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "pack_count": { "type": ["string", "null"] },
+          "currency": { "type": "string", "enum": ["NOK"] },
+          "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
+          "price_data_version": { "type": "integer", "description": "Kontoens monotone versjon. Endret verdi betyr foreldet pris-cache." },
+          "include_conditional": { "type": "boolean" },
+          "calculated_at": { "type": "string", "format": "date-time", "description": "Når prisene ble hentet. Ikke et kjøpstidspunkt." },
+          "historical_lowest": { "oneOf": [{ "$ref": "#/components/schemas/HistoricalLowest" }, { "type": "null" }] },
+          "latest_by_store": { "type": "array", "items": { "$ref": "#/components/schemas/LatestStorePrice" } },
+          "eligible_store_count": { "type": "integer", "description": "Butikker med identity_level=branch som har en kvalifisert observasjon." },
+          "excluded_observation_count": { "type": "integer" },
+          "excluded_reasons": { "type": "object", "additionalProperties": { "type": "integer" }, "description": "Årsakskode til antall, regnet over hele grunnlaget." },
+          "history": { "$ref": "#/components/schemas/PriceHistory" },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "PriceSourceRef": {
+        "type": "object",
+        "required": ["receipt_id", "revision_id", "revision", "line_id"],
+        "properties": {
+          "receipt_id": { "type": "string", "format": "uuid" },
+          "revision_id": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer" },
+          "line_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "HistoricalLowest": {
+        "type": "object",
+        "required": ["amount", "purchase_date", "store_id", "store_name", "store_identity", "condition", "age_label", "disclaimer", "source", "tied_stores"],
+        "properties": {
+          "amount": { "$ref": "#/components/schemas/DecimalString" },
+          "purchase_date": { "type": "string", "format": "date" },
+          "store_id": { "type": "string", "format": "uuid" },
+          "store_name": { "type": "string" },
+          "store_identity": { "type": "string", "enum": ["branch"] },
+          "condition": { "type": "string", "enum": ["none", "member", "multi_buy", "coupon"] },
+          "age_label": { "type": "string", "enum": ["registrert nylig", "eldre observasjon", "gammel observasjon"] },
+          "disclaimer": { "type": "string" },
+          "source": { "$ref": "#/components/schemas/PriceSourceRef" },
+          "tied_stores": {
+            "type": "array",
+            "description": "Alle delte førsteplasser, én rad per butikk, eldste kjøp først.",
+            "items": {
+              "type": "object",
+              "required": ["store_id", "name", "identity_level", "purchase_date"],
+              "properties": {
+                "store_id": { "type": "string", "format": "uuid" },
+                "name": { "type": "string" },
+                "identity_level": { "type": "string", "enum": ["branch"] },
+                "purchase_date": { "type": "string", "format": "date" }
+              }
+            }
+          }
+        }
+      },
+      "LatestStorePrice": {
+        "type": "object",
+        "description": "Siste sikre observasjon, eller samme-dags-usikkerhet når rekkefølgen ikke kan avgjøres.",
+        "required": ["store_id", "store_name", "identity_level", "certainty", "purchase_date", "observation_count", "age_label", "disclaimer", "sources"],
+        "properties": {
+          "store_id": { "type": "string", "format": "uuid" },
+          "store_name": { "type": "string" },
+          "identity_level": { "type": "string", "enum": ["branch"] },
+          "certainty": { "type": "string", "enum": ["certain", "same_day_uncertain"] },
+          "amount": { "oneOf": [{ "$ref": "#/components/schemas/DecimalString" }, { "type": "null" }], "description": "Null ved same_day_uncertain; bruk amount_range." },
+          "amount_range": {
+            "type": ["object", "null"],
+            "required": ["min", "max"],
+            "properties": {
+              "min": { "$ref": "#/components/schemas/DecimalString" },
+              "max": { "$ref": "#/components/schemas/DecimalString" }
+            }
+          },
+          "purchase_date": { "type": "string", "format": "date" },
+          "condition": { "type": ["string", "null"] },
+          "observation_count": { "type": "integer" },
+          "age_label": { "type": "string" },
+          "disclaimer": { "type": "string" },
+          "sources": { "type": "array", "items": { "$ref": "#/components/schemas/PriceSourceRef" } }
+        }
+      },
+      "PriceHistory": {
+        "type": "object",
+        "required": ["items", "total_count"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/PriceHistoryItem" } },
+          "total_count": { "type": "integer", "description": "Hele grunnlaget, ikke bare den returnerte siden." }
+        }
+      },
+      "PriceHistoryItem": {
+        "type": "object",
+        "required": ["price_basis", "date_precision", "condition", "ranked", "exclusion_reasons", "source"],
+        "properties": {
+          "amount": { "oneOf": [{ "$ref": "#/components/schemas/DecimalString" }, { "type": "null" }] },
+          "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
+          "purchase_date": { "type": ["string", "null"], "format": "date" },
+          "date_precision": { "type": "string", "enum": ["date", "datetime", "unknown"] },
+          "store_id": { "type": ["string", "null"], "format": "uuid" },
+          "store_name": { "type": ["string", "null"] },
+          "identity_level": { "type": ["string", "null"], "enum": ["branch", "chain_only", "unknown", null] },
+          "condition": { "type": "string", "enum": ["none", "member", "multi_buy", "coupon", "unknown"] },
+          "age_label": { "type": ["string", "null"] },
+          "ranked": { "type": "boolean" },
+          "exclusion_reasons": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["non_product_line", "non_nok", "unresolved_identity", "conditional", "unknown_condition", "unknown_discount", "unknown_unit", "unknown_quantity", "non_positive_quantity", "unknown_date", "unknown_store", "store_not_branch", "price_basis_mismatch"] }
+          },
+          "source": { "$ref": "#/components/schemas/PriceSourceRef" }
+        }
+      },
+      "UserStore": {
+        "type": "object",
+        "required": ["id", "display_name", "identity_level", "version"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "display_name": { "type": "string" },
+          "chain": { "type": ["string", "null"] },
+          "branch_name": { "type": ["string", "null"] },
+          "identity_level": { "type": "string", "enum": ["branch", "chain_only", "unknown"] },
+          "version": { "type": "integer" }
+        }
+      },
+      "UserStoreList": {
+        "type": "object",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/UserStore" } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "ReceiptLineInput": {
+        "type": "object",
+        "required": ["id", "raw_product_name", "quantity", "quantity_unit", "line_type"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "raw_product_name": { "type": "string" },
+          "user_product_id": { "type": ["string", "null"], "format": "uuid" },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "line_type": { "type": "string", "enum": ["product", "deposit", "fee", "discount", "return", "unknown"] },
+          "net_line_total": { "$ref": "#/components/schemas/DecimalString" },
+          "printed_unit_price": { "$ref": "#/components/schemas/DecimalString" },
+          "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
+          "condition": { "type": "string", "enum": ["none", "member", "multi_buy", "coupon", "unknown"] }
+        }
+      },
+      "ReceiptDraftRequest": {
+        "type": "object",
+        "required": ["expected_version", "mutation_id", "lines"],
+        "properties": {
+          "expected_version": { "type": "integer" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "store_id": { "type": ["string", "null"], "format": "uuid" },
+          "purchase_date": { "type": ["string", "null"], "format": "date" },
+          "purchase_time": { "type": ["string", "null"] },
+          "date_precision": { "type": "string", "enum": ["date", "datetime", "unknown"] },
+          "printed_total": { "$ref": "#/components/schemas/DecimalString" },
+          "lines": { "type": "array", "items": { "$ref": "#/components/schemas/ReceiptLineInput" } }
+        }
+      },
+      "ReceiptConfirmV2Request": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ReceiptDraftRequest" },
+          {
+            "type": "object",
+            "properties": {
+              "accept_reconciliation_gap": { "type": "boolean", "default": false }
+            }
+          }
+        ]
+      },
+      "ReceiptRevision": {
+        "type": "object",
+        "required": ["receipt_id", "revision", "status", "price_data_version"],
+        "properties": {
+          "receipt_id": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer" },
+          "status": { "type": "string" },
+          "price_data_version": { "type": "integer" },
+          "reconciliation": { "type": "object" }
+        }
+      },
+      "ShoppingList": {
+        "type": "object",
+        "required": ["id", "name", "status", "version", "content_revision", "created_at", "updated_at", "items"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "archived"] },
+          "version": {
+            "type": "integer",
+            "description": "Listens egne felter. En linjeendring øker den ikke."
+          },
+          "content_revision": {
+            "type": "integer",
+            "description": "Øker ved enhver endring på listen eller linjene. Avledet prising skal bruke denne som cachenøkkel, ikke version."
+          },
+          "deleted": { "type": "boolean", "default": false },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "items": {
+            "type": "array",
+            "description": "Komplett i REST og i fullt snapshot. I inkrementell sync er det bare linjene som er endret siden markøren.",
+            "items": { "$ref": "#/components/schemas/ShoppingListItem" }
+          }
+        }
+      },
+      "ShoppingListCollection": {
+        "type": "object",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingList" } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "ShoppingListCreate": {
+        "type": "object",
+        "required": ["name", "mutation_id"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "mutation_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "ShoppingListCopy": {
+        "type": "object",
+        "required": ["mutation_id"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "unchecked_only": {
+            "type": "boolean",
+            "default": false,
+            "description": "true tar bare ikke-slettede, ikke-avkryssede kildelinjer. Brukes av Fullfør handletur."
+          }
+        }
+      },
+      "ShoppingListFromReceipt": {
+        "type": "object",
+        "required": ["receipt_id", "mutation_id"],
+        "properties": {
+          "receipt_id": { "type": "string", "format": "uuid" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" }
+        }
+      },
+      "ShoppingListPatch": {
+        "type": "object",
+        "required": ["expected_version", "mutation_id"],
+        "properties": {
+          "expected_version": { "type": "integer" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "archived"] },
+          "deleted": {
+            "type": "boolean",
+            "description": "true setter slettemarkør og øker version. false gjenoppretter ikke; gjenoppretting er en egen handling."
+          }
+        }
+      },
+      "ShoppingListItem": {
+        "type": "object",
+        "required": ["id", "quantity", "quantity_unit", "checked", "position", "version"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "user_product_id": { "type": ["string", "null"], "format": "uuid" },
+          "free_text": { "type": ["string", "null"] },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string" },
+          "checked": { "type": "boolean" },
+          "position": { "type": "integer" },
+          "version": { "type": "integer" },
+          "deleted": { "type": "boolean", "default": false }
+        }
+      },
+      "ShoppingListItemUpsert": {
+        "type": "object",
+        "description": "Enten user_product_id eller free_text, aldri begge. Fritekst slås ikke sammen med et kjent produkt. Maks 200 aktive linjer per liste.",
+        "required": ["mutation_id", "quantity", "quantity_unit"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "user_product_id": { "type": ["string", "null"], "format": "uuid" },
+          "free_text": { "type": ["string", "null"] },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "checked": { "type": "boolean", "default": false },
+          "position": { "type": ["integer", "null"], "description": "Uten posisjon legges linjen sist blant de aktive." }
+        }
+      },
+      "ShoppingListItemPatch": {
+        "type": "object",
+        "required": ["mutation_id", "expected_version"],
+        "properties": {
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "expected_version": { "type": "integer" },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "checked": { "type": "boolean" },
+          "position": { "type": "integer" },
+          "deleted": { "type": "boolean", "description": "true setter slettemarkør. false gjenoppretter ikke." }
+        }
+      },
+      "ShoppingListPriceSummary": {
+        "type": "object",
+        "required": ["list_id", "list_version", "content_revision", "price_data_version", "calculated_at", "policy_version", "lines"],
+        "properties": {
+          "list_id": { "type": "string", "format": "uuid" },
+          "list_version": { "type": "integer", "description": "Listens egne felter (S06-A)." },
+          "content_revision": { "type": "integer", "description": "Endres av enhver endring på listen eller linjene (S06-A). Cache og ETag nøkles på denne, ikke bare list_version." },
+          "price_data_version": { "type": "integer" },
+          "calculated_at": { "type": "string", "format": "date-time" },
+          "policy_version": { "type": "string" },
+          "include_conditional": { "type": "boolean" },
+          "lines": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingListPriceSummaryLine" } }
+        }
+      },
+      "ShoppingListPriceSummaryLine": {
+        "type": "object",
+        "required": ["item_id", "quantity", "quantity_unit", "status", "eligible_store_count"],
+        "properties": {
+          "item_id": { "type": "string", "format": "uuid" },
+          "product_id": { "type": ["string", "null"], "format": "uuid" },
+          "free_text": { "type": ["string", "null"] },
+          "quantity": { "$ref": "#/components/schemas/DecimalString" },
+          "quantity_unit": { "type": "string", "enum": ["each", "kg", "g", "l", "ml", "unknown"] },
+          "status": { "type": "string", "enum": ["historical_lowest", "no_comparable_price"] },
+          "reason": {
+            "type": ["string", "null"],
+            "enum": ["free_text_no_history", "never_observed", "no_qualified_observation", null],
+            "description": "Satt bare når status er no_comparable_price. Alltid en grunn, aldri null kroner."
+          },
+          "eligible_store_count": { "type": "integer", "description": "Butikker linjen kan sammenlignes over. 1 er et ærlig svar, ikke en sammenligning." },
+          "historical_lowest": {
+            "oneOf": [{ "$ref": "#/components/schemas/ShoppingListPriceSummaryLowest" }, { "type": "null" }]
+          }
+        }
+      },
+      "ShoppingListPriceSummaryLowest": {
+        "type": "object",
+        "required": ["amount", "store_id", "store_name", "identity_level", "purchase_date", "age_label", "price_basis", "disclaimer"],
+        "properties": {
+          "amount": { "$ref": "#/components/schemas/DecimalString" },
+          "store_id": { "type": "string", "format": "uuid" },
+          "store_name": { "type": "string" },
+          "identity_level": { "type": "string", "enum": ["branch", "chain_only", "unknown"] },
+          "purchase_date": { "type": "string", "format": "date" },
+          "age_label": { "type": "string" },
+          "price_basis": { "type": "string", "enum": ["per_package", "per_kg", "per_litre", "unknown"] },
+          "disclaimer": { "type": "string" }
+        }
+      },
+      "SyncRequest": {
+        "type": "object",
+        "required": ["cursor", "mutations"],
+        "properties": {
+          "cursor": {
+            "type": ["string", "null"],
+            "description": "null ber om fullt snapshot og tillater at mutasjonene avspilles. En utløpt eller ugyldig markør gir snapshot uten avspilling."
+          },
+          "mutations": { "type": "array", "items": { "$ref": "#/components/schemas/SyncMutation" } }
+        }
+      },
+      "SyncMutation": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/SyncListCreate" },
+          { "$ref": "#/components/schemas/SyncListPatch" },
+          { "$ref": "#/components/schemas/SyncItemCreate" },
+          { "$ref": "#/components/schemas/SyncItemPatch" }
+        ],
+        "discriminator": { "propertyName": "operation" }
+      },
+      "SyncListCreate": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShoppingListCreate" },
+          {
+            "type": "object",
+            "required": ["operation"],
+            "properties": { "operation": { "type": "string", "enum": ["list_create"] } }
+          }
+        ]
+      },
+      "SyncListPatch": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShoppingListPatch" },
+          {
+            "type": "object",
+            "required": ["operation", "list_id"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["list_patch"] },
+              "list_id": { "type": "string", "format": "uuid" }
+            }
+          }
+        ]
+      },
+      "SyncItemCreate": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShoppingListItemUpsert" },
+          {
+            "type": "object",
+            "required": ["operation", "list_id"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["item_create"] },
+              "list_id": { "type": "string", "format": "uuid" }
+            }
+          }
+        ]
+      },
+      "SyncItemPatch": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShoppingListItemPatch" },
+          {
+            "type": "object",
+            "required": ["operation", "list_id", "item_id"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["item_patch"] },
+              "list_id": { "type": "string", "format": "uuid" },
+              "item_id": { "type": "string", "format": "uuid" }
+            }
+          }
+        ]
+      },
+      "SyncConflict": {
+        "type": "object",
+        "description": "Mutasjonen er ikke utført. Klienten beholder sin utgave som gjenopprettbart utkast og velger selv.",
+        "required": ["operation", "mutation_id", "code", "message"],
+        "properties": {
+          "operation": { "type": "string" },
+          "mutation_id": { "type": "string", "format": "uuid" },
+          "code": {
+            "type": "string",
+            "enum": [
+              "VERSION_CONFLICT",
+              "MUTATION_CONFLICT",
+              "LIST_DELETED",
+              "LIST_ARCHIVED",
+              "ITEM_DELETED",
+              "LIST_ITEM_LIMIT",
+              "CURSOR_EXPIRED",
+              "VALIDATION_ERROR",
+              "DUPLICATE_ID",
+              "NOT_FOUND"
+            ]
+          },
+          "message": { "type": "string" },
+          "field_errors": { "type": "array", "items": { "type": "object" } },
+          "local": { "type": ["object", "null"], "description": "Mutasjonen klienten sendte." },
+          "server": { "type": ["object", "null"], "description": "Serverens gjeldende utgave, eller null når raden ikke finnes." }
+        }
+      },
+      "SyncResponse": {
+        "type": "object",
+        "required": ["cursor", "price_data_version", "lists", "conflicts"],
+        "properties": {
+          "cursor": { "type": "string" },
+          "price_data_version": { "type": "integer" },
+          "full_snapshot": { "type": "boolean", "default": false },
+          "replaced_product_ids": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": { "type": "string", "format": "uuid" },
+                "to": { "type": "string", "format": "uuid" }
+              }
+            }
+          },
+          "lists": { "type": "array", "items": { "$ref": "#/components/schemas/ShoppingList" } },
+          "conflicts": { "type": "array", "items": { "$ref": "#/components/schemas/SyncConflict" } }
+        }
+      }
+    }
+  }
+}

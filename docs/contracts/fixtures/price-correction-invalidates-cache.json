@@ -1,0 +1,14 @@
+{
+  "id": "price-correction-invalidates-cache",
+  "description": "Retting fra 2,50 til 25,00 fjerner feilaktig minimum også fra cached lister.",
+  "before": {
+    "historical_lowest": "2.50",
+    "price_data_version": 4,
+    "list_cache_valid": true
+  },
+  "after": {
+    "historical_lowest": "25.00",
+    "price_data_version": 5,
+    "list_cache_valid": false
+  }
+}

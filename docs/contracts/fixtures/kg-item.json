@@ -1,0 +1,14 @@
+{
+  "id": "kg-item",
+  "description": "0,385 kg til 31,90 sammenlignes i kr/kg, aldri kr/stk.",
+  "line_type": "product",
+  "currency": "NOK",
+  "quantity": "0.385",
+  "quantity_unit": "kg",
+  "net_line_total": "31.90",
+  "price_basis": "per_kg",
+  "comparison_price": "82.857143",
+  "display_price": "82.86",
+  "eligible": true,
+  "warnings": []
+}

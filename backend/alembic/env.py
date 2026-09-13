@@ -9,13 +9,20 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.config import settings
 from app.database import Base
 from app.models import (  # noqa: F401
+    AccountLedger,
+    JobOutbox,
+    PasswordResetToken,
     PriceObservation,
     Product,
     ProductAlias,
     Receipt,
     ReceiptItem,
+    RefreshSession,
     Store,
     User,
+    UserProduct,
+    UserProductAlias,
+    UserStore,
 )
 
 config = context.config

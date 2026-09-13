@@ -29,6 +29,9 @@ class ReceiptService:
         image_bytes: bytes,
         content_type: str = "image/jpeg",
         receipt_id: uuid.UUID | None = None,
+        payload_hash: str | None = None,
+        image_width: int | None = None,
+        image_height: int | None = None,
     ) -> Receipt:
         receipt_id = receipt_id or uuid.uuid4()
         extension = "jpg" if "jpeg" in content_type else "png"
@@ -42,8 +45,15 @@ class ReceiptService:
             image_path=object_name,
             image_expires_at=datetime.now(timezone.utc)
             + timedelta(days=settings.receipt_image_retention_days),
+            payload_hash=payload_hash,
+            image_width=image_width,
+            image_height=image_height,
+            content_type=content_type,
         )
         self.db.add(receipt)
+        from app.services.ocr_outbox import enqueue_ocr_job
+
+        await enqueue_ocr_job(self.db, user.id, receipt.id)
         await self.db.commit()
         await self.db.refresh(receipt)
         return receipt
@@ -140,6 +150,10 @@ class ReceiptService:
         purchase_date: datetime | None,
         total: Decimal | None,
         items: list[dict],
+        *,
+        ocr_extraction_json: str | None = None,
+        ocr_quality: str | None = None,
+        ocr_pipeline_version: str | None = None,
     ) -> Receipt | None:
         receipt = await self._get_receipt_by_id(receipt_id)
         if not receipt:
@@ -150,6 +164,9 @@ class ReceiptService:
         receipt.purchase_date = purchase_date
         receipt.total = total
         receipt.status = ReceiptStatus.READY_FOR_REVIEW.value
+        receipt.ocr_extraction_json = ocr_extraction_json
+        receipt.ocr_quality = ocr_quality
+        receipt.ocr_pipeline_version = ocr_pipeline_version
 
         await self.db.execute(delete(ReceiptItem).where(ReceiptItem.receipt_id == receipt.id))
 

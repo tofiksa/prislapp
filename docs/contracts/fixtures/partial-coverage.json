@@ -1,0 +1,30 @@
+{
+  "id": "partial-coverage",
+  "description": "Butikk B har 1/2 prisede linjer og kan ikke vinne mot full dekning hos A.",
+  "priced_lines": 1,
+  "active_unchecked_lines": 2,
+  "coverage": "1/2",
+  "store_a": {
+    "name": "Rema 1000 Majorstuen",
+    "identity_level": "branch",
+    "coverage": "2/2",
+    "historical_estimate": "50.00",
+    "comparable": true
+  },
+  "store_b": {
+    "name": "Kiwi Frogner",
+    "identity_level": "branch",
+    "coverage": "1/2",
+    "historical_estimate": "15.00",
+    "winner": false,
+    "missing_lines": [
+      {
+        "item_id": "cccccccccccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "status": "no_comparable_price",
+        "reason": "never_observed_at_store",
+        "amount": null
+      }
+    ]
+  },
+  "label": "Historisk estimat — ikke dagens tilbud"
+}

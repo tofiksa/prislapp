@@ -1,12 +1,13 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, Time, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.domain.pricing import DatePrecision, DateSource
 
 
 class ReceiptStatus(str, enum.Enum):
@@ -30,11 +31,33 @@ class Receipt(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    # Lest klokkeslett bevares for seg. Dato uten klokkeslett blir aldri midnatt.
+    purchase_time: Mapped[time | None] = mapped_column(Time(), nullable=True)
+    date_precision: Mapped[str] = mapped_column(
+        String(16),
+        default=DatePrecision.UNKNOWN.value,
+        server_default=DatePrecision.UNKNOWN.value,
+    )
+    date_source: Mapped[str] = mapped_column(
+        String(16),
+        default=DateSource.UNKNOWN.value,
+        server_default=DateSource.UNKNOWN.value,
+    )
     total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=ReceiptStatus.UPLOADED.value)
+    # Gjeldende bekreftede revisjonsnummer. 0 betyr ingen bekreftet revisjon.
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     image_path: Mapped[str] = mapped_column(String(512))
     image_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # SHA-256 av rå opplastingsbytes (hex 64). Null på rader fra før 011.
+    payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    image_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     raw_ocr_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ocr_extraction_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ocr_quality: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ocr_pipeline_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

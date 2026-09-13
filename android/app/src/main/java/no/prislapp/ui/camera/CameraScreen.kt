@@ -11,30 +11,44 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -43,9 +57,11 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.SubcomposeAsyncImage
 import kotlinx.coroutines.suspendCancellableCoroutine
 import no.prislapp.R
 import no.prislapp.ui.components.PrislappTopBar
+import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -74,6 +90,11 @@ fun CameraScreen(
     ) { uri ->
         uri?.let(viewModel::onGalleryImageSelected)
     }
+    val openGallery = {
+        galleryLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+        )
+    }
 
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
@@ -99,9 +120,19 @@ fun CameraScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            val previewFile = uiState.previewFile
             when {
                 uiState.isSaving -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                previewFile != null -> {
+                    ReceiptPreviewContent(
+                        previewFile = previewFile,
+                        rotationDegrees = uiState.rotationDegrees,
+                        onUse = viewModel::acceptPreview,
+                        onRetake = viewModel::retake,
+                        onRotate = viewModel::rotatePreview,
+                    )
                 }
                 hasCameraPermission -> {
                     CameraPreviewContent(
@@ -111,27 +142,20 @@ fun CameraScreen(
                     )
                 }
                 else -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                            Text(stringResource(R.string.camera_permission))
-                        }
-                    }
+                    CameraPermissionDeniedContent(
+                        onRequestPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                        onPickGallery = openGallery,
+                    )
                 }
             }
 
-            if (!uiState.isSaving) {
+            if (!uiState.isSaving && previewFile == null && hasCameraPermission) {
                 IconButton(
-                    onClick = {
-                        galleryLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                        )
-                    },
+                    onClick = openGallery,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(24.dp),
+                        .padding(24.dp)
+                        .size(48.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Default.PhotoLibrary,
@@ -140,7 +164,8 @@ fun CameraScreen(
                 }
             }
 
-            uiState.error?.let { error ->
+            val errorText = uiState.errorResId?.let { stringResource(it) } ?: uiState.error
+            errorText?.let { error ->
                 Text(
                     text = error,
                     modifier = Modifier
@@ -153,9 +178,107 @@ fun CameraScreen(
 }
 
 @Composable
+private fun CameraPermissionDeniedContent(
+    onRequestPermission: () -> Unit,
+    onPickGallery: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(text = stringResource(R.string.camera_permission_denied_gallery_ok))
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = onRequestPermission,
+            modifier = Modifier.height(48.dp),
+        ) {
+            Text(stringResource(R.string.camera_permission))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onPickGallery,
+            modifier = Modifier.height(48.dp),
+        ) {
+            Text(stringResource(R.string.pick_from_gallery))
+        }
+    }
+}
+
+@Composable
+private fun ReceiptPreviewContent(
+    previewFile: File,
+    rotationDegrees: Int,
+    onUse: () -> Unit,
+    onRetake: () -> Unit,
+    onRotate: () -> Unit,
+) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    Box(modifier = Modifier.fillMaxSize()) {
+        SubcomposeAsyncImage(
+            model = previewFile,
+            contentDescription = stringResource(R.string.receipt_preview_zoom),
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    rotationZ = rotationDegrees.toFloat()
+                    translationX = offset.x
+                    translationY = offset.y
+                }
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 8f)
+                        offset += pan
+                    }
+                },
+        )
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(
+                onClick = onRetake,
+                modifier = Modifier
+                    .height(48.dp)
+                    .weight(1f),
+            ) {
+                Text(stringResource(R.string.receipt_preview_retake))
+            }
+            FilledIconButton(
+                onClick = onRotate,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                    contentDescription = stringResource(R.string.receipt_preview_rotate),
+                )
+            }
+            Button(
+                onClick = onUse,
+                modifier = Modifier
+                    .height(48.dp)
+                    .weight(1f),
+            ) {
+                Text(stringResource(R.string.receipt_preview_use_image))
+            }
+        }
+    }
+}
+
+@Composable
 private fun CameraPreviewContent(
-    onCapture: (java.io.File) -> Unit,
-    createOutputFile: () -> java.io.File,
+    onCapture: (File) -> Unit,
+    createOutputFile: () -> File,
     onError: (String) -> Unit,
 ) {
     val context = LocalContext.current

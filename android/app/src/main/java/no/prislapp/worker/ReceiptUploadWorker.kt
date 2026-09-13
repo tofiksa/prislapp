@@ -10,10 +10,10 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import no.prislapp.data.local.entity.PendingReceiptEntity
+import no.prislapp.data.upload.DrainOutcome
+import no.prislapp.data.upload.drainReceiptUploads
 import no.prislapp.data.repository.ReceiptRepository
 import java.util.concurrent.TimeUnit
 
@@ -25,17 +25,18 @@ class ReceiptUploadWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        val pending = receiptRepository.getPendingForUpload()
-        for (entity in pending) {
-            try {
-                receiptRepository.uploadPendingReceipt(entity)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                return Result.retry()
-            }
+        if (receiptRepository.isUploadQueuePaused()) return Result.success()
+        val outcome = drainReceiptUploads(
+            pending = receiptRepository.getPendingForUpload(),
+            upload = { receiptRepository.uploadPendingReceipt(it) },
+            markPermanent = { entity, code -> receiptRepository.markFailedPermanent(entity, code) },
+            onRetryable = { entity, code -> receiptRepository.markQueuedOffline(entity, code) },
+            onAuthPause = { receiptRepository.pauseUploadQueue() },
+        )
+        return when (outcome) {
+            DrainOutcome.RETRY -> Result.retry()
+            DrainOutcome.SUCCESS -> Result.success()
         }
-        return Result.success()
     }
 
     companion object {
