@@ -206,6 +206,9 @@ async def complete_ocr_result(
     *,
     store_name: str | None = None,
     store_chain: str | None = None,
+    ocr_extraction_json: str | None = None,
+    ocr_quality: str | None = None,
+    ocr_pipeline_version: str | None = None,
 ) -> bool:
     job = await _lock_active_job(db, receipt_id, attempt_id)
     if job is None:
@@ -230,6 +233,9 @@ async def complete_ocr_result(
         purchase_date,
         total,
         items,
+        ocr_extraction_json=ocr_extraction_json,
+        ocr_quality=ocr_quality,
+        ocr_pipeline_version=ocr_pipeline_version,
     )
     return True
 

@@ -33,9 +33,20 @@ class ReceiptSummaryResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OcrExtractionSummary(BaseModel):
+    quality: str | None = None
+    pipeline_version: str | None = None
+    store_chain: str | None = None
+    store_state: str | None = None
+    total_state: str | None = None
+    computed_items_total: Decimal | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ReceiptDetailResponse(ReceiptSummaryResponse):
     raw_ocr_text: str | None
     items: list[ReceiptItemResponse] = Field(default_factory=list)
+    extraction: OcrExtractionSummary | None = None
 
 
 class ReceiptListResponse(BaseModel):

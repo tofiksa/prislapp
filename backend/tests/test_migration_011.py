@@ -45,8 +45,7 @@ def _columns(database: Path, table: str) -> set[str]:
     return {row[1] for row in _query(database, f"PRAGMA table_info({table})")}
 
 
-def test_011_is_head_and_declared_for_schema_verification():
-    assert run_migrations.migration_revisions()[-1] == "011"
+def test_011_is_declared_for_schema_verification():
     declared = {revision.revision for revision in run_migrations.SCHEMA_REVISIONS}
     assert "011" in declared
 

@@ -1,11 +1,12 @@
 import uuid
 import logging
+import json
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal, engine
-from app.parsers import parse_receipt_text
+from app.domain.receipt_extraction import extraction_to_dict
 from app.services.ocr_outbox import (
     claim_ocr_job,
     complete_ocr_result,
@@ -14,6 +15,7 @@ from app.services.ocr_outbox import (
     reconcile_job_outbox,
 )
 from app.services.ocr_service import OcrService
+from app.services.receipt_extraction_service import PIPELINE_VERSION, parse_receipt_text_v2
 from app.services.receipt_service import ReceiptService
 from app.services.storage_service import StorageService
 from app.worker.celery_app import celery_app
@@ -55,7 +57,7 @@ async def process_receipt_with_db(receipt_id: str, db: AsyncSession) -> None:
         raw_text = OcrService().extract_text(image_bytes)
         if not raw_text.strip():
             raise ValueError("No readable text in receipt image")
-        parsed = parse_receipt_text(raw_text)
+        extraction, parsed = parse_receipt_text_v2(raw_text)
 
         items = [
             {
@@ -67,6 +69,10 @@ async def process_receipt_with_db(receipt_id: str, db: AsyncSession) -> None:
             for item in parsed.items
         ]
 
+        extraction_payload = extraction_to_dict(extraction)
+        # Omit full document tokens from persisted metadata to limit size
+        extraction_payload.pop("document", None)
+
         await complete_ocr_result(
             db,
             receipt_uuid,
@@ -76,8 +82,11 @@ async def process_receipt_with_db(receipt_id: str, db: AsyncSession) -> None:
             parsed.purchase_date,
             parsed.total,
             items,
-            store_name=parsed.store_name,
-            store_chain=parsed.store_chain,
+            store_name=parsed.store_name if extraction.store.state == "accepted" else None,
+            store_chain=parsed.store_chain if extraction.store.state == "accepted" else None,
+            ocr_extraction_json=json.dumps(extraction_payload, ensure_ascii=False),
+            ocr_quality=extraction.quality,
+            ocr_pipeline_version=PIPELINE_VERSION,
         )
     except Exception as exc:
         logging.getLogger(__name__).exception("Receipt processing failed: %s", receipt_uuid)

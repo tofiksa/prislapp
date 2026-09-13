@@ -338,6 +338,16 @@ SCHEMA_REVISIONS: tuple[SchemaRevision, ...] = (
             ),
         },
     ),
+    SchemaRevision(
+        "012",
+        {
+            "receipts": (
+                "ocr_extraction_json",
+                "ocr_quality",
+                "ocr_pipeline_version",
+            ),
+        },
+    ),
 )
 
 # Datamigreringer etterlater ingen skjemaspor. De kjøres på nytt etter stamping,

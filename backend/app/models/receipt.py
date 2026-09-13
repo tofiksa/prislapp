@@ -55,6 +55,9 @@ class Receipt(Base):
     image_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     raw_ocr_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ocr_extraction_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ocr_quality: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ocr_pipeline_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

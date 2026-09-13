@@ -18,6 +18,7 @@ from app.schemas.receipt import (
     ReceiptSummaryResponse,
     ReceiptUploadResponse,
     StoreResponse,
+    OcrExtractionSummary,
 )
 from app.services.ocr_outbox import enqueue_ocr_job, publish_pending_for_receipt
 from app.services.receipt_image import (
@@ -51,6 +52,32 @@ def _to_summary(receipt) -> ReceiptSummaryResponse:
     )
 
 
+def _extraction_summary(receipt) -> OcrExtractionSummary | None:
+    if not receipt.ocr_extraction_json and not receipt.ocr_quality:
+        return None
+    summary = OcrExtractionSummary(
+        quality=receipt.ocr_quality,
+        pipeline_version=receipt.ocr_pipeline_version,
+    )
+    if receipt.ocr_extraction_json:
+        try:
+            import json
+
+            payload = json.loads(receipt.ocr_extraction_json)
+            summary.store_chain = payload.get("store", {}).get("chain")
+            summary.store_state = payload.get("store", {}).get("state")
+            summary.total_state = payload.get("total", {}).get("state")
+            computed = payload.get("total", {}).get("computed_items_total")
+            if computed is not None:
+                from decimal import Decimal
+
+                summary.computed_items_total = Decimal(computed)
+            summary.warnings = list(payload.get("warnings", []))
+        except (json.JSONDecodeError, ValueError):
+            summary.warnings = ["extraction_metadata_unreadable"]
+    return summary
+
+
 def _to_detail(receipt) -> ReceiptDetailResponse:
     summary = _to_summary(receipt)
     items = [
@@ -67,6 +94,7 @@ def _to_detail(receipt) -> ReceiptDetailResponse:
         **summary.model_dump(),
         raw_ocr_text=receipt.raw_ocr_text,
         items=items,
+        extraction=_extraction_summary(receipt),
     )
 
 

@@ -1,0 +1,6 @@
+REMA 1000 METRO SENTER
+Sum 7 varer 158,83
+MVA-grunnlag
+15% 152,08
+25% 6,75
+Totalt 158,83

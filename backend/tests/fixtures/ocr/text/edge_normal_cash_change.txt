@@ -1,0 +1,6 @@
+Normal Oslo, Thon Senter Triaden
+Vare 1 50,00
+Vare 2 50,00
+I alt kr. 100,00
+Kontant -200,00
+Vekslepenger 100,00
